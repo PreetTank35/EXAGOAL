@@ -11,8 +11,10 @@ import {
   HiUser,
   HiArrowRight,
   HiBuildingLibrary,
+  HiPhone,
 } from 'react-icons/hi2';
 import type { UserRole } from '@/lib/types';
+import { createClient } from '@/lib/supabase/client';
 
 const ROLES: { value: UserRole; label: string; desc: string; icon: React.ElementType }[] = [
   {
@@ -29,32 +31,101 @@ const ROLES: { value: UserRole; label: string; desc: string; icon: React.Element
   },
 ];
 
+type RegisterMethod = 'email' | 'phone';
+
 export default function RegisterPage() {
   const router = useRouter();
+  const [method, setMethod] = useState<RegisterMethod>('email');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('student');
+  const [department, setDepartment] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccessMsg('');
 
-    // MVP: Simulate registration — replace with Supabase Auth
-    // const supabase = createClient();
-    // const { error } = await supabase.auth.signUp({
-    //   email,
-    //   password,
-    //   options: { data: { full_name: fullName, role } },
-    // });
+    try {
+      // Frontend email validation gate for instructors
+      if (role === 'instructor' && method === 'email' && !email.endsWith('@exagoal.in')) {
+        throw new Error('Instructor accounts require an @exagoal.in email address.');
+      }
 
-    setTimeout(() => {
+      const supabase = createClient();
+      let authError = null;
+
+      if (method === 'email') {
+        const { error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { full_name: fullName, role, department: role === 'instructor' ? department : undefined },
+          },
+        });
+        authError = signUpError;
+      } else {
+        const { error: signUpError } = await supabase.auth.signUp({
+          phone,
+          password,
+          options: {
+            data: { full_name: fullName, role, department: role === 'instructor' ? department : undefined },
+          },
+        });
+        authError = signUpError;
+      }
+
+      if (authError) {
+        throw new Error(authError.message);
+      }
+
+      setSuccessMsg('Account created successfully! Please wait...');
+      
+      // Check the database to see what role was actually assigned (Truth Check)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Determine role from the email domain (the DB trigger may not have completed yet)
+        const isActuallyInstructor = !!user.email && user.email.endsWith('@exagoal.in');
+
+        // Set HMAC-Signed Secure Cookie via server
+        const actualRole = isActuallyInstructor ? 'instructor' : 'student';
+        await fetch('/api/auth/set-role', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: actualRole }),
+        });
+
+        if (isActuallyInstructor) {
+          setSuccessMsg('Welcome, Instructor! Redirecting to your portal...');
+          setTimeout(() => {
+            router.push('/dashboard/teacher');
+            router.refresh();
+          }, 1500);
+        } else {
+          setSuccessMsg('Account created! Redirecting to your dashboard...');
+          setTimeout(() => {
+            router.push('/dashboard');
+            router.refresh();
+          }, 1500);
+        }
+      } else {
+        // If user is null (e.g. Email Confirmations are forced ON)
+        setSuccessMsg('Account created successfully! Please check your email or phone for a verification link/code.');
+        setTimeout(() => {
+          router.push('/login');
+          router.refresh();
+        }, 2500);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to create account. Please try again.');
       setLoading(false);
-      router.push('/dashboard');
-    }, 1200);
+    }
   };
 
   return (
@@ -94,9 +165,37 @@ export default function RegisterPage() {
             Join the future of intelligent assessment
           </p>
 
+          {/* Registration Method Toggle */}
+          <div className="flex bg-zinc-800/50 rounded-xl p-1 mb-6 border border-zinc-700/50">
+            <button
+              type="button"
+              onClick={() => setMethod('email')}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                method === 'email' ? 'bg-indigo-500 text-white' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <HiEnvelope className="w-4 h-4" /> Email
+            </button>
+            <button
+              type="button"
+              onClick={() => setMethod('phone')}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                method === 'phone' ? 'bg-indigo-500 text-white' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <HiPhone className="w-4 h-4" /> Phone
+            </button>
+          </div>
+
           {error && (
             <div className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
               {error}
+            </div>
+          )}
+          
+          {successMsg && (
+            <div className="mb-6 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
+              {successMsg}
             </div>
           )}
 
@@ -130,6 +229,35 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            {/* Department (Instructor only) */}
+            {role === 'instructor' && (
+              <div>
+                <label className="text-sm font-medium text-zinc-300 mb-1.5 block">
+                  Department
+                </label>
+                <select
+                  id="register-department"
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="input-field w-full"
+                  required={role === 'instructor'}
+                >
+                  <option value="">Select your department</option>
+                  <option value="Physics">Physics</option>
+                  <option value="Mathematics">Mathematics</option>
+                  <option value="Chemistry">Chemistry</option>
+                  <option value="Biology">Biology</option>
+                  <option value="Computer Science">Computer Science</option>
+                  <option value="English">English</option>
+                  <option value="History">History</option>
+                  <option value="Geography">Geography</option>
+                  <option value="Economics">Economics</option>
+                  <option value="Political Science">Political Science</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            )}
+
             <div>
               <label className="text-sm font-medium text-zinc-300 mb-1.5 block">
                 Full Name
@@ -148,23 +276,43 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div>
-              <label className="text-sm font-medium text-zinc-300 mb-1.5 block">
-                Email
-              </label>
-              <div className="relative">
-                <HiEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                <input
-                  id="register-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="input-field !pl-10"
-                  placeholder="you@institution.edu"
-                  required
-                />
+            {method === 'email' ? (
+              <div>
+                <label className="text-sm font-medium text-zinc-300 mb-1.5 block">
+                  Email
+                </label>
+                <div className="relative">
+                  <HiEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <input
+                    id="register-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="input-field !pl-10"
+                    placeholder="you@institution.edu"
+                    required={method === 'email'}
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <label className="text-sm font-medium text-zinc-300 mb-1.5 block">
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <HiPhone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <input
+                    id="register-phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="input-field !pl-10"
+                    placeholder="+1234567890"
+                    required={method === 'phone'}
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="text-sm font-medium text-zinc-300 mb-1.5 block">

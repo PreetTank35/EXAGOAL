@@ -1,78 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
-  HiPlus,
   HiClock,
   HiMagnifyingGlass,
-  HiAdjustmentsHorizontal,
-  HiEllipsisVertical,
+  HiClipboardDocumentList,
 } from 'react-icons/hi2';
+import { createClient } from '@/lib/supabase/client';
 
-const DEMO_EXAMS = [
-  {
-    id: '1',
-    title: 'Advanced Mathematics — Calculus II',
-    description: 'Covers integration techniques, series convergence, and multivariable calculus.',
-    exam_type: 'knowledge',
-    duration_minutes: 90,
-    scheduled_at: '2026-06-14T10:00:00Z',
-    status: 'published',
-    is_adaptive: true,
-    question_count: 25,
-    anti_cheat_level: 'strict',
-  },
-  {
-    id: '2',
-    title: 'Ethical Reasoning — Case Studies',
-    description: 'Analyze real-world ethical dilemmas across technology, medicine, and business.',
-    exam_type: 'ethical',
-    duration_minutes: 60,
-    scheduled_at: '2026-06-15T14:00:00Z',
-    status: 'published',
-    is_adaptive: false,
-    question_count: 10,
-    anti_cheat_level: 'standard',
-  },
-  {
-    id: '3',
-    title: 'Collaborative Problem Solving',
-    description: 'Team-based assessment evaluating communication, leadership, and peer review.',
-    exam_type: 'collaborative',
-    duration_minutes: 45,
-    scheduled_at: '2026-06-17T09:00:00Z',
-    status: 'draft',
-    is_adaptive: false,
-    question_count: 8,
-    anti_cheat_level: 'minimal',
-  },
-  {
-    id: '4',
-    title: 'Physics — Quantum Mechanics',
-    description: 'Wave functions, Schrödinger equation, quantum entanglement fundamentals.',
-    exam_type: 'reasoning',
-    duration_minutes: 120,
-    scheduled_at: '2026-06-20T09:00:00Z',
-    status: 'draft',
-    is_adaptive: true,
-    question_count: 30,
-    anti_cheat_level: 'strict',
-  },
-  {
-    id: '5',
-    title: 'Wellness Self-Assessment Q2',
-    description: 'Reflect on mental well-being, study habits, and work-life balance this quarter.',
-    exam_type: 'wellness_check',
-    duration_minutes: 15,
-    scheduled_at: '2026-06-22T08:00:00Z',
-    status: 'published',
-    is_adaptive: false,
-    question_count: 12,
-    anti_cheat_level: 'minimal',
-  },
-];
+interface Exam {
+  id: string;
+  title: string;
+  description: string | null;
+  exam_type: string;
+  duration_minutes: number;
+  scheduled_at: string;
+  status: string;
+  is_adaptive: boolean;
+}
 
 function getExamTypeColor(type: string) {
   const colors: Record<string, string> = {
@@ -98,30 +45,79 @@ function getExamTypeLabel(type: string) {
 
 function getStatusStyle(status: string) {
   switch (status) {
-    case 'published':
-      return 'bg-green-500/10 text-green-400';
-    case 'active':
-      return 'bg-yellow-500/10 text-yellow-400';
-    case 'draft':
-      return 'bg-zinc-500/10 text-zinc-400';
-    case 'completed':
-      return 'bg-blue-500/10 text-blue-400';
-    default:
-      return 'bg-zinc-500/10 text-zinc-400';
+    case 'published': return 'bg-green-500/10 text-green-400';
+    case 'active': return 'bg-yellow-500/10 text-yellow-400';
+    case 'completed': return 'bg-blue-500/10 text-blue-400';
+    default: return 'bg-zinc-500/10 text-zinc-400';
   }
+}
+
+function getTimeLabel(scheduledAt: string): string {
+  const now = new Date();
+  const scheduled = new Date(scheduledAt);
+  const diff = scheduled.getTime() - now.getTime();
+
+  if (diff < 0) return 'In Progress';
+  if (diff < 3600000) return `Starts in ${Math.ceil(diff / 60000)} min`;
+  if (diff < 86400000) return `Starts in ${Math.ceil(diff / 3600000)} hours`;
+  return scheduled.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export default function ExamsPage() {
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredExams = DEMO_EXAMS.filter((exam) => {
-    const matchesSearch =
-      exam.title.toLowerCase().includes(search.toLowerCase()) ||
-      exam.description.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter =
-      filter === 'all' || exam.status === filter || exam.exam_type === filter;
-    return matchesSearch && matchesFilter;
+  const supabase = createClient();
+
+  useEffect(() => {
+    loadExams();
+
+    // Subscribe to real-time changes on exams table
+    const channel = supabase
+      .channel('published-exams')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'exams',
+        filter: 'status=eq.published',
+      }, () => {
+        loadExams(); // Reload when any exam changes
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  async function loadExams() {
+    // Students see all published exams
+    const { data, error } = await supabase
+      .from('exams')
+      .select('*')
+      .in('status', ['published', 'active'])
+      .order('scheduled_at', { ascending: true });
+
+    if (data) setExams(data);
+    setLoading(false);
+  }
+
+  const filteredExams = exams.filter((exam) =>
+    exam.title.toLowerCase().includes(search.toLowerCase()) ||
+    (exam.description || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Group by status
+  const now = new Date();
+  const upcoming = filteredExams.filter(e => new Date(e.scheduled_at) > now);
+  const inProgress = filteredExams.filter(e => {
+    const start = new Date(e.scheduled_at);
+    const end = new Date(start.getTime() + e.duration_minutes * 60000);
+    return now >= start && now <= end;
+  });
+  const pastExams = filteredExams.filter(e => {
+    const start = new Date(e.scheduled_at);
+    const end = new Date(start.getTime() + e.duration_minutes * 60000);
+    return now > end;
   });
 
   return (
@@ -131,21 +127,14 @@ export default function ExamsPage() {
         <div>
           <h1 className="text-2xl font-bold">Examinations</h1>
           <p className="text-zinc-400 text-sm mt-1">
-            Manage and monitor all assessments
+            Your published exams appear here automatically
           </p>
         </div>
-        <Link
-          href="/dashboard/exams/create"
-          className="btn-primary flex items-center gap-2 text-sm"
-        >
-          <HiPlus className="w-4 h-4" />
-          Create Exam
-        </Link>
       </div>
 
-      {/* Search & Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <div className="relative flex-1">
+      {/* Search */}
+      <div className="mb-6">
+        <div className="relative max-w-md">
           <HiMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
             id="exam-search"
@@ -156,97 +145,113 @@ export default function ExamsPage() {
             placeholder="Search exams..."
           />
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {['all', 'published', 'draft', 'knowledge', 'ethical', 'wellness_check'].map(
-            (f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                  filter === f
-                    ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
-                    : 'bg-zinc-800/50 text-zinc-400 border border-transparent hover:bg-zinc-800'
-                }`}
-              >
-                {f === 'all'
-                  ? 'All'
-                  : f === 'wellness_check'
-                  ? '体 Wellness'
-                  : f.charAt(0).toUpperCase() + f.slice(1)}
-              </button>
-            )
-          )}
-        </div>
       </div>
 
-      {/* Exam Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        {filteredExams.map((exam, idx) => (
-          <motion.div
-            key={exam.id}
-            className="glass-card glass-card-hover p-6"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: idx * 0.08 }}
-          >
-            <div className="flex items-start justify-between mb-4">
-              <span
-                className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
-                style={{
-                  background: `${getExamTypeColor(exam.exam_type)}15`,
-                  color: getExamTypeColor(exam.exam_type),
-                }}
-              >
-                {getExamTypeLabel(exam.exam_type)}
-              </span>
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getStatusStyle(exam.status)}`}>
-                {exam.status}
-              </span>
-            </div>
-
-            <h3 className="text-base font-semibold mb-2 leading-snug">
-              {exam.title}
-            </h3>
-            <p className="text-sm text-zinc-400 mb-4 line-clamp-2">
-              {exam.description}
-            </p>
-
-            <div className="flex items-center gap-4 text-xs text-zinc-500 mb-4">
-              <span className="flex items-center gap-1">
-                <HiClock className="w-3.5 h-3.5" />
-                {exam.duration_minutes} min
-              </span>
-              <span>{exam.question_count} questions</span>
-              {exam.is_adaptive && (
-                <span className="text-cyan-400 font-medium">⚡ Adaptive</span>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between pt-4 border-t border-zinc-800/50">
-              <span className="text-xs text-zinc-500">
-                {new Date(exam.scheduled_at).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </span>
-              <Link
-                href={`/dashboard/exams/${exam.id}`}
-                className="text-xs font-medium text-indigo-400 hover:text-indigo-300"
-              >
-                View Details →
-              </Link>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {filteredExams.length === 0 && (
+      {loading ? (
         <div className="glass-card p-12 text-center">
-          <p className="text-zinc-400">No exams match your criteria.</p>
+          <div className="w-6 h-6 border-2 border-zinc-600 border-t-indigo-400 rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-zinc-400">Loading exams...</p>
+        </div>
+      ) : filteredExams.length === 0 ? (
+        <div className="glass-card p-12 text-center">
+          <HiClipboardDocumentList className="w-10 h-10 mx-auto mb-4 text-zinc-600" />
+          <p className="text-zinc-400 font-medium mb-1">No exams available</p>
+          <p className="text-sm text-zinc-500">Exams will appear here once your teachers publish them.</p>
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {/* In Progress */}
+          {inProgress.length > 0 && (
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-400 mb-4">🔴 In Progress</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {inProgress.map((exam, idx) => (
+                  <ExamCard key={exam.id} exam={exam} idx={idx} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Upcoming */}
+          {upcoming.length > 0 && (
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-4">📅 Upcoming</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {upcoming.map((exam, idx) => (
+                  <ExamCard key={exam.id} exam={exam} idx={idx} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Past */}
+          {pastExams.length > 0 && (
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 mb-4">🕒 Past Exams</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 opacity-75 grayscale-[0.5]">
+                {pastExams.map((exam, idx) => (
+                  <ExamCard key={exam.id} exam={exam} idx={idx} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+function ExamCard({ exam, idx }: { exam: Exam; idx: number }) {
+  return (
+    <motion.div
+      className="glass-card glass-card-hover p-6"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: idx * 0.08 }}
+    >
+      <div className="flex items-start justify-between mb-4">
+        <span
+          className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+          style={{
+            background: `${getExamTypeColor(exam.exam_type)}15`,
+            color: getExamTypeColor(exam.exam_type),
+          }}
+        >
+          {getExamTypeLabel(exam.exam_type)}
+        </span>
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getStatusStyle(exam.status)}`}>
+          {exam.status}
+        </span>
+      </div>
+
+      <h3 className="text-base font-semibold mb-2 leading-snug">
+        {exam.title}
+      </h3>
+      <p className="text-sm text-zinc-400 mb-4 line-clamp-2">
+        {exam.description || 'No description provided.'}
+      </p>
+
+      <div className="flex items-center gap-4 text-xs text-zinc-500 mb-4">
+        <span className="flex items-center gap-1">
+          <HiClock className="w-3.5 h-3.5" />
+          {exam.duration_minutes} min
+        </span>
+        {exam.is_adaptive && (
+          <span className="text-cyan-400 font-medium">⚡ Adaptive</span>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between pt-4 border-t border-zinc-800/50">
+        <span className="text-xs text-zinc-500">
+          {getTimeLabel(exam.scheduled_at)}
+        </span>
+        <Link
+          href={`/dashboard/exams/${exam.id}`}
+          className="text-xs font-medium text-indigo-400 hover:text-indigo-300"
+        >
+          View Details →
+        </Link>
+      </div>
+    </motion.div>
   );
 }

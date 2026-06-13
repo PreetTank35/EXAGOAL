@@ -1,7 +1,9 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
 import {
   HiClipboardDocumentList,
   HiArrowTrendingUp,
@@ -46,63 +48,6 @@ const STATS = [
   },
 ];
 
-const UPCOMING_EXAMS = [
-  {
-    id: '1',
-    title: 'Advanced Mathematics — Calculus II',
-    type: 'knowledge',
-    scheduled: '2026-06-14T10:00:00Z',
-    duration: 90,
-    status: 'published',
-  },
-  {
-    id: '2',
-    title: 'Ethical Reasoning — Case Studies',
-    type: 'ethical',
-    scheduled: '2026-06-15T14:00:00Z',
-    duration: 60,
-    status: 'published',
-  },
-  {
-    id: '3',
-    title: 'Collaborative Problem Solving',
-    type: 'collaborative',
-    scheduled: '2026-06-17T09:00:00Z',
-    duration: 45,
-    status: 'draft',
-  },
-];
-
-const RECENT_RESULTS = [
-  {
-    id: '1',
-    title: 'Physics — Mechanics',
-    score: 85,
-    maxScore: 100,
-    date: '2026-06-10',
-    grade: 'A',
-    chiContribution: 85,
-  },
-  {
-    id: '2',
-    title: 'Wellness Self-Assessment',
-    score: 72,
-    maxScore: 100,
-    date: '2026-06-08',
-    grade: 'B',
-    taiContribution: 72,
-  },
-  {
-    id: '3',
-    title: 'Team Leadership Evaluation',
-    score: 91,
-    maxScore: 100,
-    date: '2026-06-05',
-    grade: 'A+',
-    tokuContribution: 91,
-  },
-];
-
 function getExamTypeColor(type: string) {
   const colors: Record<string, string> = {
     knowledge: '#6366f1',
@@ -126,6 +71,28 @@ function getExamTypeLabel(type: string) {
 }
 
 export default function DashboardPage() {
+  const [upcomingExams, setUpcomingExams] = useState<any[]>([]);
+  const supabase = createClient();
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase
+        .from('exams')
+        .select('id, title, exam_type, scheduled_at, duration_minutes, status')
+        .in('status', ['published', 'active'])
+        .order('scheduled_at', { ascending: false })
+        .limit(5);
+      if (data) setUpcomingExams(data);
+    }
+    load();
+
+    // Real-time subscription
+    const channel = supabase
+      .channel('dashboard-exams')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'exams' }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
@@ -193,7 +160,11 @@ export default function DashboardPage() {
           </div>
 
           <div className="space-y-3">
-            {UPCOMING_EXAMS.map((exam) => (
+            {upcomingExams.length === 0 ? (
+              <div className="p-6 text-center text-zinc-500 text-sm">
+                No upcoming exams. They'll appear here once your teachers publish them.
+              </div>
+            ) : upcomingExams.map((exam) => (
               <div
                 key={exam.id}
                 className="flex items-center justify-between p-4 rounded-xl bg-zinc-800/30 hover:bg-zinc-800/50 transition-colors"
@@ -201,7 +172,7 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-4">
                   <div
                     className="w-1 h-10 rounded-full"
-                    style={{ background: getExamTypeColor(exam.type) }}
+                    style={{ background: getExamTypeColor(exam.exam_type) }}
                   />
                   <div>
                     <h3 className="text-sm font-semibold">{exam.title}</h3>
@@ -209,28 +180,28 @@ export default function DashboardPage() {
                       <span
                         className="text-xs font-medium px-2 py-0.5 rounded-full"
                         style={{
-                          background: `${getExamTypeColor(exam.type)}15`,
-                          color: getExamTypeColor(exam.type),
+                          background: `${getExamTypeColor(exam.exam_type)}15`,
+                          color: getExamTypeColor(exam.exam_type),
                         }}
                       >
-                        {getExamTypeLabel(exam.type)}
+                        {getExamTypeLabel(exam.exam_type)}
                       </span>
                       <span className="text-xs text-zinc-500 flex items-center gap-1">
                         <HiClock className="w-3 h-3" />
-                        {exam.duration} min
+                        {exam.duration_minutes} min
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-zinc-400">
-                    {new Date(exam.scheduled).toLocaleDateString('en-US', {
+                    {new Date(exam.scheduled_at).toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
                     })}
                   </div>
                   <div className="text-xs text-zinc-500">
-                    {new Date(exam.scheduled).toLocaleTimeString('en-US', {
+                    {new Date(exam.scheduled_at).toLocaleTimeString('en-US', {
                       hour: '2-digit',
                       minute: '2-digit',
                     })}
@@ -259,44 +230,9 @@ export default function DashboardPage() {
           </div>
 
           <div className="space-y-4">
-            {RECENT_RESULTS.map((result) => (
-              <div key={result.id} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium">{result.title}</h3>
-                  <span
-                    className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                      result.score >= 85
-                        ? 'bg-green-500/10 text-green-400'
-                        : result.score >= 70
-                        ? 'bg-yellow-500/10 text-yellow-400'
-                        : 'bg-red-500/10 text-red-400'
-                    }`}
-                  >
-                    {result.grade}
-                  </span>
-                </div>
-                <div className="w-full h-1.5 rounded-full bg-zinc-800">
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{
-                      width: `${result.score}%`,
-                      background:
-                        result.score >= 85
-                          ? 'linear-gradient(90deg, #22c55e, #06b6d4)'
-                          : result.score >= 70
-                          ? 'linear-gradient(90deg, #f59e0b, #eab308)'
-                          : 'linear-gradient(90deg, #ef4444, #f97316)',
-                    }}
-                  />
-                </div>
-                <div className="flex items-center justify-between text-xs text-zinc-500">
-                  <span>
-                    {result.score}/{result.maxScore}
-                  </span>
-                  <span>{result.date}</span>
-                </div>
-              </div>
-            ))}
+            <div className="p-6 text-center text-zinc-500 text-sm">
+              Your exam results will appear here once you complete assessments.
+            </div>
           </div>
         </motion.div>
       </div>

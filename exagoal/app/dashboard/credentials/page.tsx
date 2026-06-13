@@ -180,7 +180,7 @@ export default function CredentialsPage() {
                 <HiLink className="w-3 h-3" />
                 {cred.network}
               </span>
-              <span>Block #{cred.block_number.toLocaleString()}</span>
+              <span>Block #{cred.block_number.toLocaleString('en-US')}</span>
               <button
                 className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 font-medium ml-auto"
                 title="Generate QR code"

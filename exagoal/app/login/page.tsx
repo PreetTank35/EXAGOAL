@@ -4,11 +4,17 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { HiAcademicCap, HiEnvelope, HiLockClosed, HiArrowRight } from 'react-icons/hi2';
+import { HiAcademicCap, HiEnvelope, HiLockClosed, HiArrowRight, HiPhone, HiBuildingLibrary } from 'react-icons/hi2';
+import { createClient } from '@/lib/supabase/client';
+
+type LoginMethod = 'email' | 'phone';
 
 export default function LoginPage() {
   const router = useRouter();
+  const [method, setMethod] = useState<LoginMethod>('email');
+  const [role, setRole] = useState<'student' | 'instructor'>('student');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -18,14 +24,60 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    // MVP: Simulate login — replace with Supabase Auth
-    // const supabase = createClient();
-    // const { error } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      const supabase = createClient();
+      let authError = null;
 
-    setTimeout(() => {
+      if (method === 'email') {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        authError = signInError;
+      } else {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          phone,
+          password,
+        });
+        authError = signInError;
+      }
+
+      if (authError) {
+        throw new Error(authError.message);
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Authentication failed');
+
+      // 1. Verify actual role in the Database (Truth Check)
+      const { data: teacherRecord } = await supabase
+        .from('teachers')
+        .select('id')
+        .eq('id', user.id)
+        .single();
+
+      const isActuallyInstructor = !!teacherRecord;
+
+      // 2. Set HMAC-Signed Secure Cookie via server, then route correctly
+      const actualRole = isActuallyInstructor ? 'instructor' : 'student';
+      await fetch('/api/auth/set-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: actualRole }),
+      });
+
+      if (isActuallyInstructor) {
+        router.push('/dashboard/teacher');
+      } else {
+        router.push('/dashboard');
+      }
+
+      router.refresh(); // Refresh to ensure middleware catches the new session cookie
+    } catch (err: any) {
+      setError(err.message || 'Failed to sign in. Please check your credentials.');
+    } finally {
       setLoading(false);
-      router.push('/dashboard');
-    }, 1000);
+    }
   };
 
   return (
@@ -73,6 +125,50 @@ export default function LoginPage() {
             Sign in to access your dashboard
           </p>
 
+          {/* Role Toggle */}
+          <div className="flex bg-zinc-800/50 rounded-xl p-1 mb-4 border border-zinc-700/50">
+            <button
+              type="button"
+              onClick={() => setRole('student')}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                role === 'student' ? 'bg-indigo-500 text-white' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <HiAcademicCap className="w-4 h-4" /> Student
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole('instructor')}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                role === 'instructor' ? 'bg-rose-500 text-white' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <HiBuildingLibrary className="w-4 h-4" /> Instructor
+            </button>
+          </div>
+
+          {/* Login Method Toggle */}
+          <div className="flex bg-zinc-800/50 rounded-xl p-1 mb-6 border border-zinc-700/50">
+            <button
+              type="button"
+              onClick={() => setMethod('email')}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                method === 'email' ? 'bg-indigo-500 text-white' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <HiEnvelope className="w-4 h-4" /> Email
+            </button>
+            <button
+              type="button"
+              onClick={() => setMethod('phone')}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                method === 'phone' ? 'bg-indigo-500 text-white' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <HiPhone className="w-4 h-4" /> Phone
+            </button>
+          </div>
+
           {error && (
             <div className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
               {error}
@@ -80,23 +176,43 @@ export default function LoginPage() {
           )}
 
           <form onSubmit={handleLogin} className="space-y-5">
-            <div>
-              <label className="text-sm font-medium text-zinc-300 mb-1.5 block">
-                Email
-              </label>
-              <div className="relative">
-                <HiEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                <input
-                  id="login-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="input-field !pl-10"
-                  placeholder="you@institution.edu"
-                  required
-                />
+            {method === 'email' ? (
+              <div>
+                <label className="text-sm font-medium text-zinc-300 mb-1.5 block">
+                  Email
+                </label>
+                <div className="relative">
+                  <HiEnvelope className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <input
+                    id="login-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="input-field !pl-10"
+                    placeholder="you@institution.edu"
+                    required={method === 'email'}
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <label className="text-sm font-medium text-zinc-300 mb-1.5 block">
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <HiPhone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <input
+                    id="login-phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="input-field !pl-10"
+                    placeholder="+1234567890"
+                    required={method === 'phone'}
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="text-sm font-medium text-zinc-300 mb-1.5 block">

@@ -8,22 +8,8 @@ const AUTH_ROUTES = ['/login', '/register'];
 // Public routes
 const PUBLIC_ROUTES = ['/', '/verify'];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  // MVP: Skip auth checks (no Supabase connected yet)
-  // In production, check Supabase session cookie:
-  //
-  // const supabase = createMiddlewareClient({ req: request, res: NextResponse.next() });
-  // const { data: { session } } = await supabase.auth.getSession();
-  //
-  // if (!session && isProtectedRoute(pathname)) {
-  //   return NextResponse.redirect(new URL('/login', request.url));
-  // }
-  //
-  // if (session && isAuthRoute(pathname)) {
-  //   return NextResponse.redirect(new URL('/dashboard', request.url));
-  // }
 
   const response = NextResponse.next();
 
@@ -32,6 +18,52 @@ export function middleware(request: NextRequest) {
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('X-DNS-Prefetch-Control', 'on');
+
+  // Role-Based Routing Protection (HMAC-Verified Edge Check)
+  if (pathname.startsWith('/dashboard/teacher')) {
+    const cookieValue = request.cookies.get('exagoal_role')?.value;
+
+    if (!cookieValue || !cookieValue.includes('.')) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+
+    const [role, signature] = cookieValue.split('.');
+    
+    if (role !== 'instructor') {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+
+    // Verify the HMAC signature to prevent cookie tampering
+    const salt = process.env.OTP_SECRET_SALT || 'exagoal_otp_salt_change_in_production';
+    const encoder = new TextEncoder();
+
+    try {
+      const key = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(salt),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      );
+
+      const expectedSig = await crypto.subtle.sign(
+        'HMAC',
+        key,
+        encoder.encode(role)
+      );
+
+      const expectedHex = Array.from(new Uint8Array(expectedSig))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      if (signature !== expectedHex) {
+        // Cookie was tampered with — redirect to student dashboard
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+      }
+    } catch {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+  }
 
   // Extra security for exam routes
   if (pathname.startsWith('/exam')) {
