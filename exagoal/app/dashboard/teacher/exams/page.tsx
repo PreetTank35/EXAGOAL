@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { HiClipboardDocumentList, HiSparkles, HiPencilSquare, HiTrash, HiEye, HiDocumentDuplicate } from 'react-icons/hi2';
+import { HiClipboardDocumentList, HiSparkles, HiPencilSquare, HiTrash, HiEye, HiDocumentDuplicate, HiKey } from 'react-icons/hi2';
 import { createClient } from '@/lib/supabase/client';
 import { formatTo12Hour } from '@/lib/utils/timeFormat';
+import TeacherOtpModal from '@/components/exams/TeacherOtpModal';
 
 interface Exam {
   id: string;
@@ -28,6 +29,10 @@ export default function TeacherExamsPage() {
   const [filter, setFilter] = useState('all');
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // OTP Modal State
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  const [selectedOtpExam, setSelectedOtpExam] = useState<{ id: string, title: string } | null>(null);
 
   const supabase = createClient();
 
@@ -180,6 +185,18 @@ export default function TeacherExamsPage() {
                             Publish
                           </button>
                         )}
+                        {(exam.status === 'active' || exam.status === 'completed') && (
+                          <button
+                            onClick={() => {
+                              setSelectedOtpExam({ id: exam.id, title: exam.title });
+                              setIsOtpModalOpen(true);
+                            }}
+                            className="p-2 text-zinc-400 hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10 transition-colors"
+                            title="View OTPs"
+                          >
+                            <HiKey className="w-4 h-4" />
+                          </button>
+                        )}
                         <button className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors" title="View">
                           <HiEye className="w-4 h-4" />
                         </button>
@@ -199,6 +216,13 @@ export default function TeacherExamsPage() {
           </table>
         )}
       </div>
+
+      <TeacherOtpModal
+        isOpen={isOtpModalOpen}
+        onClose={() => setIsOtpModalOpen(false)}
+        examId={selectedOtpExam?.id || ''}
+        examTitle={selectedOtpExam?.title || ''}
+      />
     </div>
   );
 }
