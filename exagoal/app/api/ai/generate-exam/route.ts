@@ -96,6 +96,7 @@ Rules:
 
     // Use reliable models on OpenRouter
     const MODELS = [
+      'nvidia/llama-nemotron-rerank-vl-1b-v2:free',
       'meta-llama/llama-3.1-8b-instruct',
       'google/gemini-2.0-flash-lite-preview-02-05:free',
       'google/gemini-2.0-flash-exp:free',
