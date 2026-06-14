@@ -94,13 +94,12 @@ Rules:
 - bloom_taxonomy is one of: remember, understand, apply, analyze, evaluate, create.
 - Return ONLY the JSON. No preamble, no suffix.`;
 
-    // Use reliable free models on OpenRouter
+    // Use reliable models on OpenRouter
     const MODELS = [
-      'nvidia/llama-nemotron-rerank-vl-1b-v2:free',
+      'meta-llama/llama-3.1-8b-instruct',
       'google/gemini-2.0-flash-lite-preview-02-05:free',
       'google/gemini-2.0-flash-exp:free',
-      'nvidia/llama-3.1-nemotron-70b-instruct:free',
-      'meta-llama/llama-3.1-8b-instruct:free'
+      'nvidia/llama-3.1-nemotron-70b-instruct:free'
     ];
 
     let rawContent = '';
