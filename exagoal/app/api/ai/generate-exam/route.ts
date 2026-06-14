@@ -107,6 +107,9 @@ Rules:
     let lastError = '';
 
     for (const model of MODELS) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout per model
+      
       try {
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
@@ -128,7 +131,10 @@ Rules:
             temperature: 0.2,
             max_tokens: 3000,
           }),
+          signal: controller.signal,
         });
+        
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           const err = await response.json().catch(() => ({}));
@@ -141,7 +147,8 @@ Rules:
 
         if (rawContent.trim()) break; // Got a response, stop trying models
       } catch (err: any) {
-        lastError = err.message;
+        clearTimeout(timeoutId);
+        lastError = err.name === 'AbortError' ? `Model ${model} timed out after 25s` : err.message;
         continue;
       }
     }
