@@ -102,7 +102,14 @@ export default function GenerateExamPage() {
       clearInterval(progressInterval);
 
       if (!res.ok) {
-        const err = await res.json();
+        let err;
+        let text = '';
+        try {
+          text = await res.clone().text();
+          err = await res.json();
+        } catch (e) {
+          throw new Error(`Server Error (${res.status}): ${text.substring(0, 100)}...`);
+        }
         throw new Error(err.error || 'Generation failed');
       }
 

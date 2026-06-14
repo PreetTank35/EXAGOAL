@@ -94,11 +94,12 @@ Rules:
 - bloom_taxonomy is one of: remember, understand, apply, analyze, evaluate, create.
 - Return ONLY the JSON. No preamble, no suffix.`;
 
-    // Primary model: google/gemini-flash-1.5 — fast, reliable JSON output, free tier
+    // Use reliable free models on OpenRouter
     const MODELS = [
-      'google/gemini-flash-1.5',
-      'meta-llama/llama-3.1-8b-instruct:free',
-      'mistralai/mistral-7b-instruct:free',
+      'google/gemini-2.0-flash-lite-preview-02-05:free',
+      'google/gemini-2.0-flash-exp:free',
+      'nvidia/llama-3.1-nemotron-70b-instruct:free',
+      'meta-llama/llama-3.1-8b-instruct:free'
     ];
 
     let rawContent = '';
@@ -124,9 +125,7 @@ Rules:
               },
             ],
             temperature: 0.2,
-            max_tokens: 4096,
-            // Request JSON output where supported
-            response_format: { type: 'json_object' },
+            max_tokens: 3000,
           }),
         });
 
