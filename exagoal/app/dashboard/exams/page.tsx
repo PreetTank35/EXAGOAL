@@ -276,17 +276,31 @@ function ExamCard({ exam, idx }: { exam: Exam; idx: number }) {
             const start = new Date(exam.scheduled_at);
             const end = exam.available_until ? new Date(exam.available_until) : new Date(start.getTime() + exam.duration_minutes * 60000);
             const isOpen = now >= start && now <= end;
+            const isUpcoming = now < start;
             
-            return isOpen ? (
-              <Link
-                href={`/dashboard/exams/${exam.id}`}
-                className="text-xs font-medium text-indigo-400 hover:text-indigo-300"
-              >
-                View Details →
-              </Link>
-            ) : (
+            if (isOpen) {
+              return (
+                <Link
+                  href={`/dashboard/exams/${exam.id}`}
+                  className="text-xs font-medium px-4 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                >
+                  Start Exam →
+                </Link>
+              );
+            }
+            if (isUpcoming) {
+              return (
+                <Link
+                  href={`/dashboard/exams/${exam.id}`}
+                  className="text-xs font-medium text-indigo-400 hover:text-indigo-300"
+                >
+                  View Details →
+                </Link>
+              );
+            }
+            return (
               <span className="text-xs font-medium text-zinc-600 cursor-not-allowed">
-                {now < start ? 'Not Started' : 'Ended'}
+                Ended
               </span>
             );
         })()}

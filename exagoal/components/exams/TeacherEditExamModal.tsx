@@ -11,6 +11,9 @@ export interface ExamEditData {
   description: string | null;
   scheduled_at: string;
   duration_minutes: number;
+  available_until?: string;
+  status?: string;
+  exam_type?: string;
 }
 
 interface TeacherEditExamModalProps {
@@ -25,6 +28,9 @@ export default function TeacherEditExamModal({ isOpen, onClose, exam, onSave }: 
   const [description, setDescription] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(60);
+  const [availableUntil, setAvailableUntil] = useState('');
+  const [status, setStatus] = useState('draft');
+  const [examType, setExamType] = useState('knowledge');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -36,15 +42,28 @@ export default function TeacherEditExamModal({ isOpen, onClose, exam, onSave }: 
       setTitle(exam.title);
       setDescription(exam.description || '');
       setDurationMinutes(exam.duration_minutes);
+      setStatus(exam.status || 'draft');
+      setExamType(exam.exam_type || 'knowledge');
       
       // Convert to format required by datetime-local (YYYY-MM-DDThh:mm)
       try {
         const d = new Date(exam.scheduled_at);
-        // We use local time for the input
         const localDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
         setScheduledAt(localDate.toISOString().slice(0, 16));
-      } catch (e: unknown) {
+      } catch {
         setScheduledAt('');
+      }
+
+      try {
+        if (exam.available_until) {
+          const d = new Date(exam.available_until);
+          const localDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
+          setAvailableUntil(localDate.toISOString().slice(0, 16));
+        } else {
+          setAvailableUntil('');
+        }
+      } catch {
+        setAvailableUntil('');
       }
     }
   }, [exam, isOpen]);
@@ -58,15 +77,29 @@ export default function TeacherEditExamModal({ isOpen, onClose, exam, onSave }: 
 
     try {
       // Convert back to UTC for DB
-      const utcDate = new Date(scheduledAt).toISOString();
+      const utcScheduled = new Date(scheduledAt).toISOString();
+      const utcAvailableUntil = availableUntil ? new Date(availableUntil).toISOString() : null;
 
-      const updates = {
+      // Validate: available_until must be after scheduled_at
+      if (utcAvailableUntil && new Date(utcAvailableUntil) <= new Date(utcScheduled)) {
+        setError('Available until must be after the scheduled start time.');
+        setLoading(false);
+        return;
+      }
+
+      const updates: Record<string, unknown> = {
         title,
         description,
-        scheduled_at: utcDate,
+        scheduled_at: utcScheduled,
         duration_minutes: durationMinutes,
+        status,
+        exam_type: examType,
         updated_at: new Date().toISOString()
       };
+
+      if (utcAvailableUntil) {
+        updates.available_until = utcAvailableUntil;
+      }
 
       const { error: updateError } = await supabase
         .from('exams')
@@ -77,7 +110,13 @@ export default function TeacherEditExamModal({ isOpen, onClose, exam, onSave }: 
 
       onSave({
         ...exam,
-        ...updates
+        title,
+        description,
+        scheduled_at: utcScheduled,
+        duration_minutes: durationMinutes,
+        available_until: utcAvailableUntil || undefined,
+        status,
+        exam_type: examType,
       });
       
       onClose();
@@ -91,6 +130,9 @@ export default function TeacherEditExamModal({ isOpen, onClose, exam, onSave }: 
       setLoading(false);
     }
   }
+
+  // Check if exam has already started (active/completed)
+  const isLive = exam?.status === 'active' || exam?.status === 'completed';
 
   if (!isOpen || !exam) return null;
 
@@ -111,7 +153,7 @@ export default function TeacherEditExamModal({ isOpen, onClose, exam, onSave }: 
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+          className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
         >
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-zinc-800 bg-zinc-900/50">
@@ -121,7 +163,7 @@ export default function TeacherEditExamModal({ isOpen, onClose, exam, onSave }: 
               </div>
               <div>
                 <h2 className="text-lg font-bold text-white">Edit Exam</h2>
-                <p className="text-sm text-zinc-400">Modify exam details below.</p>
+                <p className="text-sm text-zinc-400">Modify exam details before it starts.</p>
               </div>
             </div>
             <button
@@ -137,6 +179,12 @@ export default function TeacherEditExamModal({ isOpen, onClose, exam, onSave }: 
             {error && (
               <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                 {error}
+              </div>
+            )}
+
+            {isLive && (
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">
+                ⚠️ This exam is currently <strong>{exam.status}</strong>. Some fields like scheduled time cannot be changed.
               </div>
             )}
 
@@ -163,13 +211,46 @@ export default function TeacherEditExamModal({ isOpen, onClose, exam, onSave }: 
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-1.5">Scheduled Date & Time</label>
+                <label className="block text-sm font-medium text-zinc-300 mb-1.5">Status</label>
+                <select
+                  value={status}
+                  onChange={e => setStatus(e.target.value)}
+                  className="input-field w-full"
+                  disabled={isLive}
+                >
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                  {isLive && <option value="active">Active (Live)</option>}
+                  {exam.status === 'completed' && <option value="completed">Completed</option>}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1.5">Exam Type</label>
+                <select
+                  value={examType}
+                  onChange={e => setExamType(e.target.value)}
+                  className="input-field w-full"
+                  disabled={isLive}
+                >
+                  <option value="knowledge">Knowledge</option>
+                  <option value="reasoning">Reasoning</option>
+                  <option value="ethical">Ethics</option>
+                  <option value="collaborative">Collaboration</option>
+                  <option value="wellness_check">Wellness Check</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1.5">Scheduled Start</label>
                 <input
                   type="datetime-local"
                   value={scheduledAt}
                   onChange={e => setScheduledAt(e.target.value)}
                   className="input-field w-full"
                   required
+                  disabled={isLive}
                 />
               </div>
               <div>
@@ -184,6 +265,19 @@ export default function TeacherEditExamModal({ isOpen, onClose, exam, onSave }: 
                   required
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-1.5">Available Until (Optional)</label>
+              <input
+                type="datetime-local"
+                value={availableUntil}
+                onChange={e => setAvailableUntil(e.target.value)}
+                className="input-field w-full"
+              />
+              <p className="text-xs text-zinc-500 mt-1">
+                Students can start the exam any time between the scheduled start and this deadline.
+              </p>
             </div>
 
             <div className="pt-4 border-t border-zinc-800 flex justify-end gap-3">

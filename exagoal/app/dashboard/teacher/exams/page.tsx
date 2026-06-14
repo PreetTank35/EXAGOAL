@@ -15,6 +15,7 @@ interface Exam {
   exam_type: string;
   duration_minutes: number;
   scheduled_at: string;
+  available_until?: string;
   created_at: string;
 }
 
@@ -196,7 +197,10 @@ export default function TeacherExamsPage() {
                               title: exam.title,
                               description: exam.description,
                               scheduled_at: exam.scheduled_at,
-                              duration_minutes: exam.duration_minutes
+                              duration_minutes: exam.duration_minutes,
+                              available_until: exam.available_until,
+                              status: exam.status,
+                              exam_type: exam.exam_type,
                             });
                             setIsEditModalOpen(true);
                           }}
