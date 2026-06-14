@@ -11,11 +11,12 @@ function getSupabaseAdmin() {
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { otp_code, student_id } = await req.json();
-    const examId = params.id;
+    const resolvedParams = await params;
+    const examId = resolvedParams.id;
 
     if (!otp_code || !student_id || !examId) {
       return NextResponse.json({ error: 'exam_id, otp_code, and student_id are required.' }, { status: 400 });
