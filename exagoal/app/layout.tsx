@@ -36,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={plusJakartaSans.variable}>
+    <html lang="en" className={`${plusJakartaSans.variable} dark`}>
       <body className="antialiased min-h-screen font-sans">
         {children}
       </body>
