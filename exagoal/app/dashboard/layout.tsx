@@ -42,46 +42,48 @@ export default function DashboardLayout({
 
   return (
     <>
-      <div className="min-h-screen flex">
+      <div className="min-h-screen flex selection:bg-purple-500/30">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:sticky top-0 left-0 z-50 h-screen w-64 flex flex-col transition-transform duration-300 lg:translate-x-0 ${
+        className={`fixed lg:sticky top-0 left-0 z-50 h-screen w-64 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         style={{
-          background: 'rgba(15, 15, 20, 0.95)',
-          borderRight: '1px solid rgba(99, 102, 241, 0.1)',
-          backdropFilter: 'blur(20px)',
+          background: 'rgba(10, 10, 15, 0.7)',
+          borderRight: '1px solid rgba(255, 255, 255, 0.05)',
+          backdropFilter: 'blur(30px)',
+          WebkitBackdropFilter: 'blur(30px)',
+          boxShadow: '10px 0 30px -10px rgba(0,0,0,0.5)',
         }}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between px-5 py-5 border-b border-zinc-800/50">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-              <HiAcademicCap className="w-4 h-4 text-white" />
+        <div className="flex items-center justify-between px-6 py-6 border-b border-white/5">
+          <Link href="/dashboard" className="flex items-center gap-3 group">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#8b5cf6] to-[#06b6d4] flex items-center justify-center shadow-lg shadow-purple-500/20 group-hover:scale-105 transition-transform">
+              <HiAcademicCap className="w-5 h-5 text-white" />
             </div>
-            <span className="text-lg font-bold tracking-tight">
-              Exa<span className="text-indigo-400">Goal</span>
+            <span className="text-xl font-bold tracking-tight text-white">
+              Exa<span className="text-[#06b6d4]">Goal</span>
             </span>
           </Link>
           <button
-            className="lg:hidden text-zinc-400 hover:text-white"
+            className="lg:hidden text-zinc-400 hover:text-white transition-colors"
             onClick={() => setSidebarOpen(false)}
           >
-            <HiXMark className="w-5 h-5" />
+            <HiXMark className="w-6 h-6" />
           </button>
         </div>
 
         {/* Nav Items */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
           {NAV_ITEMS.map((item) => {
             const isActive =
               item.href === '/dashboard'
@@ -93,24 +95,28 @@ export default function DashboardLayout({
                 key={item.href}
                 href={item.href}
                 onClick={() => setSidebarOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all duration-200 relative overflow-hidden ${
                   isActive
-                    ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+                    ? 'text-white shadow-[0_4px_20px_rgba(139,92,246,0.15)]'
+                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
                 }`}
               >
-                <item.icon className={`w-5 h-5 ${isActive ? 'text-indigo-400' : ''}`} />
-                {item.label}
+                {/* Active Indicator Background */}
+                {isActive && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#8b5cf6]/20 to-[#06b6d4]/10 border border-white/10 rounded-xl pointer-events-none" />
+                )}
+                <item.icon className={`w-5 h-5 relative z-10 transition-colors ${isActive ? 'text-[#06b6d4]' : ''}`} />
+                <span className="relative z-10 tracking-wide">{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
         {/* Bottom */}
-        <div className="px-3 py-4 border-t border-zinc-800/50 space-y-1">
+        <div className="px-4 py-6 border-t border-white/5 space-y-1.5">
           <Link
             href="#"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all"
+            className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 transition-all"
           >
             <HiCog6Tooth className="w-5 h-5" />
             Settings
@@ -123,7 +129,7 @@ export default function DashboardLayout({
               await fetch('/api/auth/set-role', { method: 'DELETE' });
               window.location.href = '/';
             }}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:text-red-400 hover:bg-red-500/5 transition-all w-full"
+            className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-zinc-400 hover:text-[#ec4899] hover:bg-[#ec4899]/10 transition-all w-full"
           >
             <HiArrowRightOnRectangle className="w-5 h-5" />
             Sign Out
@@ -132,33 +138,46 @@ export default function DashboardLayout({
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col min-h-screen relative">
         {/* Top Bar */}
-        <header className="sticky top-0 z-30 flex items-center justify-between px-6 py-4 border-b border-zinc-800/50"
+        <header 
+          className="sticky top-0 z-30 flex items-center justify-between px-8 py-5 border-b border-white/5 transition-all"
           style={{
-            background: 'rgba(9, 9, 11, 0.8)',
-            backdropFilter: 'blur(12px)',
+            background: 'rgba(10, 10, 15, 0.6)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
           }}
         >
-          <button
-            className="lg:hidden text-zinc-400 hover:text-white"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <HiBars3 className="w-6 h-6" />
-          </button>
-
-          <div className="hidden lg:block" />
-
           <div className="flex items-center gap-4">
-            <NotificationBell />
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-              <span className="text-xs font-bold text-white">ST</span>
+            <button
+              className="lg:hidden text-zinc-400 hover:text-white transition-colors"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <HiBars3 className="w-7 h-7" />
+            </button>
+            <h1 className="text-xl font-bold tracking-tight hidden sm:block text-white">
+              {NAV_ITEMS.find(i => 
+                i.href === '/dashboard' 
+                  ? pathname === '/dashboard' 
+                  : pathname.startsWith(i.href)
+              )?.label || 'Dashboard'}
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-5">
+            <div className="hover:scale-105 transition-transform">
+              <NotificationBell />
+            </div>
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#06b6d4] flex items-center justify-center shadow-lg shadow-purple-500/20 ring-2 ring-white/10 cursor-pointer hover:ring-white/30 transition-all">
+              <span className="text-sm font-extrabold text-white">ST</span>
             </div>
           </div>
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 px-6 py-8">{children}</main>
+        <main className="flex-1 px-4 sm:px-8 py-8 w-full max-w-7xl mx-auto z-10 relative">
+          {children}
+        </main>
       </div>
     </div>
     </>
