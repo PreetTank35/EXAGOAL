@@ -51,9 +51,11 @@ export async function POST(
       .select('id')
       .eq('role', 'student');
 
-    if (studentsError || !students || students.length === 0) {
-      return NextResponse.json({ error: 'No students found to launch the exam for.' }, { status: 400 });
+    if (studentsError) {
+      return NextResponse.json({ error: 'Error fetching students.' }, { status: 500 });
     }
+    
+    const studentsList = students || [];
 
     // Set validity window (15 mins)
     const now = new Date();
@@ -63,7 +65,7 @@ export async function POST(
     const sessionsToInsert = [];
     const notificationsToInsert = [];
 
-    for (const student of students) {
+    for (const student of studentsList) {
       const otpCode = generateSecureOtp();
       
       // Upsert exam_session for this student
@@ -97,22 +99,24 @@ export async function POST(
       .eq('exam_id', examId)
       .eq('notification_type', 'otp_delivery');
 
-    // 5. Insert new sessions (using upsert in case of re-launches)
-    const { error: sessionInsertError } = await supabase
-      .from('exam_sessions')
-      .upsert(sessionsToInsert, { onConflict: 'exam_id,student_id', ignoreDuplicates: false });
+    if (studentsList.length > 0) {
+      // 5. Insert new sessions (using upsert in case of re-launches)
+      const { error: sessionInsertError } = await supabase
+        .from('exam_sessions')
+        .upsert(sessionsToInsert, { onConflict: 'exam_id,student_id', ignoreDuplicates: false });
 
-    if (sessionInsertError) {
-      throw new Error(`Failed to create sessions: ${sessionInsertError.message}`);
-    }
+      if (sessionInsertError) {
+        throw new Error(`Failed to create sessions: ${sessionInsertError.message}`);
+      }
 
-    // 6. Insert new real-time notifications
-    const { error: notificationInsertError } = await supabase
-      .from('student_notifications')
-      .insert(notificationsToInsert);
+      // 6. Insert new real-time notifications
+      const { error: notificationInsertError } = await supabase
+        .from('student_notifications')
+        .insert(notificationsToInsert);
 
-    if (notificationInsertError) {
-      throw new Error(`Failed to send notifications: ${notificationInsertError.message}`);
+      if (notificationInsertError) {
+        throw new Error(`Failed to send notifications: ${notificationInsertError.message}`);
+      }
     }
 
     // 7. Update exam status to active
@@ -123,7 +127,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: `Exam launched. OTPs delivered to ${students.length} students.`,
+      message: `Exam launched. OTPs delivered to ${studentsList.length} students.`,
     });
 
   } catch (error: any) {
