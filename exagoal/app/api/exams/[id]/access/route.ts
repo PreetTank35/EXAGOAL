@@ -29,7 +29,7 @@ export async function POST(
     // ============================================================
     const { data: exam, error: examError } = await supabase
       .from('exams')
-      .select('id, title, scheduled_at, duration_minutes, status')
+      .select('id, title, scheduled_at, available_until, duration_minutes, status')
       .eq('id', examId)
       .single();
 
@@ -39,7 +39,9 @@ export async function POST(
 
     const now = new Date();
     const scheduledAt = new Date(exam.scheduled_at);
-    const examEndAt = new Date(scheduledAt.getTime() + exam.duration_minutes * 60 * 1000);
+    const examEndAt = exam.available_until 
+      ? new Date(exam.available_until) 
+      : new Date(scheduledAt.getTime() + exam.duration_minutes * 60 * 1000);
 
     if (now < scheduledAt) {
       const minutesUntil = Math.ceil((scheduledAt.getTime() - now.getTime()) / 60000);
@@ -50,7 +52,7 @@ export async function POST(
     }
 
     if (now > examEndAt) {
-      return NextResponse.json({ error: 'This exam has already ended.' }, { status: 403 });
+      return NextResponse.json({ error: 'This exam availability window has closed.' }, { status: 403 });
     }
 
     // ============================================================
