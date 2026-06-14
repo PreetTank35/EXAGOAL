@@ -19,7 +19,7 @@ export default function AIChatPage() {
     {
       id: 'welcome',
       role: 'assistant',
-      content: "Hello! I'm your ExaGoal AI Tutor, powered by Nvidia Nemotron. How can I help you learn today?",
+      content: "Hello! I'm your ExaGoal AI Tutor, powered by Google Gemini. How can I help you learn today?",
     },
   ]);
   const [input, setInput] = useState('');
@@ -122,7 +122,7 @@ export default function AIChatPage() {
             AI Tutor
           </h1>
           <p className="text-zinc-400 text-sm mt-1">
-            Powered by Nvidia Nemotron via OpenRouter (Streaming mode)
+            Powered by Google Gemini via OpenRouter (Streaming mode)
           </p>
         </div>
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-800/50 border border-zinc-700/50 text-xs text-zinc-300">
@@ -215,7 +215,7 @@ export default function AIChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask Nemotron a question... (Shift+Enter for new line)"
+              placeholder="Ask Gemini a question... (Shift+Enter for new line)"
               className="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-xl py-3 pl-4 pr-12 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none min-h-[52px] max-h-[150px] custom-scrollbar"
               rows={1}
               style={{
