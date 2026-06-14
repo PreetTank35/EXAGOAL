@@ -45,7 +45,7 @@ export function createDateFrom12Hour(dateStr: string, hour: number, minute: numb
     h24 = hour + 12;
   }
   
-  const d = new Date(dateStr); // this parses as UTC midnight or local midnight depending on string format, but "YYYY-MM-DD" is UTC midnight.
+  // "YYYY-MM-DD" parses as UTC midnight. 
   // We want it to be local time. The safest way is to parse parts.
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day, h24, minute, 0, 0);

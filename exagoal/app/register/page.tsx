@@ -122,8 +122,13 @@ export default function RegisterPage() {
           router.refresh();
         }, 2500);
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to create account. Please try again.');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || 'Failed to register. Please try again.');
+      } else {
+        setError(String(err) || 'Failed to register. Please try again.');
+      }
+    } finally {
       setLoading(false);
     }
   };

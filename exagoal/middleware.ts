@@ -1,12 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Routes that require authentication
-const PROTECTED_ROUTES = ['/dashboard', '/exam'];
-// Routes only for unauthenticated users
-const AUTH_ROUTES = ['/login', '/register'];
-// Public routes
-const PUBLIC_ROUTES = ['/', '/verify'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

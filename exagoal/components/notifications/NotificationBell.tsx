@@ -19,6 +19,8 @@ interface OtpNotification {
   };
 }
 
+import type { RealtimeChannel } from '@supabase/supabase-js';
+
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState<OtpNotification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -35,7 +37,7 @@ export default function NotificationBell() {
   }, []);
 
   useEffect(() => {
-    let channel: any;
+    let channel: RealtimeChannel;
 
     const fetchNotifications = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -105,7 +107,7 @@ export default function NotificationBell() {
       if (channel) supabase.removeChannel(channel);
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [supabase]);
 
   const copyToClipboard = async (id: string, otpCode: string) => {
     try {

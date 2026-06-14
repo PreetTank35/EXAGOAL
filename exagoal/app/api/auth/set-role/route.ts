@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 /**
  * Signs an HMAC cookie for role verification.
@@ -6,10 +7,28 @@ import { NextResponse } from 'next/server';
  */
 export async function POST(req: Request) {
   try {
+    const supabase = await createServerSupabaseClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { role } = await req.json();
 
     if (role !== 'student' && role !== 'instructor') {
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
+    }
+
+    // Verify the requested role matches the database
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !profile || profile.role !== role) {
+      return NextResponse.json({ error: 'Forbidden: You do not have this role' }, { status: 403 });
     }
 
     const salt = process.env.OTP_SECRET_SALT || 'exagoal_otp_salt_change_in_production';

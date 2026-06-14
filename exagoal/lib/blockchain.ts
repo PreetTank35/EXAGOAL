@@ -54,7 +54,7 @@ export async function anchorToBlockchain(
 }
 
 /** Verify a credential hash (MVP: check against database) */
-export async function verifyCredential(credentialHash: string): Promise<{
+export async function verifyCredential(_credentialHash: string): Promise<{
   valid: boolean;
   issuer?: string;
   issuedAt?: string;

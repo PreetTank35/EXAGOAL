@@ -73,8 +73,12 @@ export default function LoginPage() {
       }
 
       router.refresh(); // Refresh to ensure middleware catches the new session cookie
-    } catch (err: any) {
-      setError(err.message || 'Failed to sign in. Please check your credentials.');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || 'Failed to sign in. Please check your credentials.');
+      } else {
+        setError(String(err) || 'Failed to sign in. Please check your credentials.');
+      }
     } finally {
       setLoading(false);
     }

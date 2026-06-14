@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiXMark, HiClipboardDocumentList, HiClipboardDocumentCheck, HiKey } from 'react-icons/hi2';
 
@@ -25,13 +25,7 @@ export default function TeacherOtpModal({ isOpen, onClose, examId, examTitle }: 
   const [error, setError] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isOpen && examId) {
-      fetchOtps();
-    }
-  }, [isOpen, examId]);
-
-  async function fetchOtps() {
+  const fetchOtps = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -39,12 +33,23 @@ export default function TeacherOtpModal({ isOpen, onClose, examId, examTitle }: 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load OTPs');
       setOtps(data.otps || []);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(String(err));
+      }
     } finally {
       setLoading(false);
     }
-  }
+  }, [examId]);
+
+  useEffect(() => {
+    if (isOpen && examId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchOtps();
+    }
+  }, [isOpen, examId, fetchOtps]);
 
   const copyToClipboard = async (text: string, id: string) => {
     try {
@@ -127,7 +132,7 @@ export default function TeacherOtpModal({ isOpen, onClose, examId, examTitle }: 
                 </div>
                 <h3 className="text-lg font-medium text-white mb-2">No OTPs Generated</h3>
                 <p className="text-sm text-zinc-400 max-w-sm mx-auto">
-                  Access codes haven't been generated for this exam yet. Once you launch the exam, the access codes will appear here.
+                  Access codes haven&apos;t been generated for this exam yet. Once you launch the exam, the access codes will appear here.
                 </p>
               </div>
             ) : (

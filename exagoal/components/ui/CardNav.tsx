@@ -1,6 +1,7 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState, ReactNode } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { gsap } from 'gsap';
 import { GoArrowUpRight } from 'react-icons/go';
@@ -68,7 +69,7 @@ const CardNav = ({
         contentEl.style.position = 'static';
         contentEl.style.height = 'auto';
 
-        contentEl.offsetHeight;
+        void contentEl.offsetHeight;
 
         const topBar = 60;
         const padding = 16;
@@ -178,9 +179,9 @@ const CardNav = ({
             <div className="hamburger-line" />
           </div>
 
-          <div className="logo-container">
+          <div className="logo-container relative h-10 w-32">
             {typeof logo === 'string' ? (
-              <img src={logo} alt={logoAlt} className="logo" />
+              <Image src={logo} alt={logoAlt} fill className="object-contain" />
             ) : (
               logo
             )}

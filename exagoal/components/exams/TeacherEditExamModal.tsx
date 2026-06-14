@@ -32,6 +32,7 @@ export default function TeacherEditExamModal({ isOpen, onClose, exam, onSave }: 
 
   useEffect(() => {
     if (exam && isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTitle(exam.title);
       setDescription(exam.description || '');
       setDurationMinutes(exam.duration_minutes);
@@ -42,7 +43,7 @@ export default function TeacherEditExamModal({ isOpen, onClose, exam, onSave }: 
         // We use local time for the input
         const localDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
         setScheduledAt(localDate.toISOString().slice(0, 16));
-      } catch (e) {
+      } catch (e: unknown) {
         setScheduledAt('');
       }
     }
@@ -80,8 +81,12 @@ export default function TeacherEditExamModal({ isOpen, onClose, exam, onSave }: 
       });
       
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Failed to update exam');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || 'Failed to update exam');
+      } else {
+        setError(String(err) || 'Failed to update exam');
+      }
     } finally {
       setLoading(false);
     }
