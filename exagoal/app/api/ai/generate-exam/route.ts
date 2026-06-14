@@ -98,7 +98,10 @@ Rules:
 
     // Use reliable and fast models on OpenRouter
     const MODELS = [
-      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'
+      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+      'google/gemini-2.5-flash:free',
+      'google/gemini-2.0-flash-lite-preview-02-05:free',
+      'meta-llama/llama-3.3-70b-instruct:free'
     ];
 
     let rawContent = '';
@@ -143,7 +146,11 @@ Rules:
         const data = await response.json();
         rawContent = data.choices?.[0]?.message?.content || '';
 
-        if (rawContent.trim()) break; // Got a response, stop trying models
+        if (rawContent.trim()) {
+          break; // Got a response, stop trying models
+        } else {
+          lastError = `Model ${model} returned an empty response`;
+        }
       } catch (err: any) {
         clearTimeout(timeoutId);
         lastError = err.name === 'AbortError' ? `Model ${model} timed out after 15s` : err.message;
