@@ -151,10 +151,27 @@ export default function TeacherExamsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-1">
+                        {exam.status !== 'completed' && exam.status !== 'archived' && exam.status !== 'active' && (
+                          <button
+                            onClick={async () => {
+                              const res = await fetch(`/api/exams/${exam.id}/launch`, { method: 'POST' });
+                              if (res.ok) {
+                                setExams(exams.map(e => e.id === exam.id ? { ...e, status: 'active' } : e));
+                                alert('Exam launched! OTP notifications sent to students.');
+                              } else {
+                                const data = await res.json();
+                                alert(`Error: ${data.error}`);
+                              }
+                            }}
+                            className="px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 rounded-lg hover:bg-emerald-500/20 transition-colors border border-emerald-500/20"
+                          >
+                            Launch Exam
+                          </button>
+                        )}
                         {exam.status === 'draft' && (
                           <button
                             onClick={() => handlePublish(exam.id)}
-                            className="px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 rounded-lg hover:bg-emerald-500/20 transition-colors border border-emerald-500/20"
+                            className="px-3 py-1.5 text-xs font-medium text-blue-400 bg-blue-500/10 rounded-lg hover:bg-blue-500/20 transition-colors border border-blue-500/20"
                           >
                             Publish
                           </button>

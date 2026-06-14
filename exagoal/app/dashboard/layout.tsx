@@ -16,6 +16,7 @@ import {
   HiXMark,
   HiCog6Tooth,
 } from 'react-icons/hi2';
+import OtpBanner from '@/components/notifications/OtpBanner';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: HiHome },
@@ -40,7 +41,9 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen flex">
+    <>
+      <OtpBanner />
+      <div className="min-h-screen flex">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -158,5 +161,6 @@ export default function DashboardLayout({
         <main className="flex-1 px-6 py-8">{children}</main>
       </div>
     </div>
+    </>
   );
 }
