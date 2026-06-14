@@ -10,6 +10,7 @@ import {
 } from 'react-icons/hi2';
 import { createClient } from '@/lib/supabase/client';
 import { formatTo12Hour } from '@/lib/utils/timeFormat';
+import AnimatedList from '@/components/ui/AnimatedList';
 
 interface Exam {
   id: string;
@@ -184,11 +185,11 @@ export default function ExamsPage() {
           {inProgress.length > 0 && (
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wider text-amber-400 mb-4">🔴 In Progress</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                {inProgress.map((exam, idx) => (
-                  <ExamCard key={exam.id} exam={exam} idx={idx} />
-                ))}
-              </div>
+              <AnimatedList
+                items={inProgress}
+                renderItem={(exam, idx) => <ExamCard exam={exam} idx={idx} />}
+                displayScrollbar={false}
+              />
             </div>
           )}
 
@@ -196,11 +197,11 @@ export default function ExamsPage() {
           {upcoming.length > 0 && (
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-4">📅 Upcoming</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                {upcoming.map((exam, idx) => (
-                  <ExamCard key={exam.id} exam={exam} idx={idx} />
-                ))}
-              </div>
+              <AnimatedList
+                items={upcoming}
+                renderItem={(exam, idx) => <ExamCard exam={exam} idx={idx} />}
+                displayScrollbar={false}
+              />
             </div>
           )}
 
@@ -208,10 +209,12 @@ export default function ExamsPage() {
           {pastExams.length > 0 && (
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 mb-4">🕒 Past Exams</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 opacity-75 grayscale-[0.5]">
-                {pastExams.map((exam, idx) => (
-                  <ExamCard key={exam.id} exam={exam} idx={idx} />
-                ))}
+              <div className="opacity-75 grayscale-[0.5]">
+                <AnimatedList
+                  items={pastExams}
+                  renderItem={(exam, idx) => <ExamCard exam={exam} idx={idx} />}
+                  displayScrollbar={false}
+                />
               </div>
             </div>
           )}

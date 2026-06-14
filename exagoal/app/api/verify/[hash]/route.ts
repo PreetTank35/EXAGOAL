@@ -15,9 +15,9 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 
 export async function GET(
   request: Request,
-  { params }: { params: { hash: string } }
+  { params }: { params: Promise<{ hash: string }> }
 ) {
-  const hash = params.hash;
+  const { hash } = await params;
 
   if (!hash) {
     return NextResponse.json({ error: 'Missing credential hash' }, { status: 400 });

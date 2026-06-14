@@ -42,40 +42,33 @@ export default function DashboardLayout({
 
   return (
     <>
-      <div className="min-h-screen flex selection:bg-purple-500/30">
+      <div className="min-h-screen flex bg-background text-foreground font-sans">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:sticky top-0 left-0 z-50 h-screen w-64 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed lg:sticky top-0 left-0 z-50 h-screen w-64 flex flex-col bg-sidebar border-r border-sidebar-border transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
-        style={{
-          background: 'rgba(10, 10, 15, 0.7)',
-          borderRight: '1px solid rgba(255, 255, 255, 0.05)',
-          backdropFilter: 'blur(30px)',
-          WebkitBackdropFilter: 'blur(30px)',
-          boxShadow: '10px 0 30px -10px rgba(0,0,0,0.5)',
-        }}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between px-6 py-6 border-b border-white/5">
+        <div className="flex items-center justify-between px-6 py-6 border-b border-sidebar-border">
           <Link href="/dashboard" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#8b5cf6] to-[#06b6d4] flex items-center justify-center shadow-lg shadow-purple-500/20 group-hover:scale-105 transition-transform">
-              <HiAcademicCap className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-sidebar-primary flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+              <HiAcademicCap className="w-5 h-5 text-sidebar-primary-foreground" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-white">
-              Exa<span className="text-[#06b6d4]">Goal</span>
+            <span className="text-xl font-bold tracking-tight text-sidebar-foreground">
+              Exa<span className="text-primary">Goal</span>
             </span>
           </Link>
           <button
-            className="lg:hidden text-zinc-400 hover:text-white transition-colors"
+            className="lg:hidden text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors"
             onClick={() => setSidebarOpen(false)}
           >
             <HiXMark className="w-6 h-6" />
@@ -95,17 +88,13 @@ export default function DashboardLayout({
                 key={item.href}
                 href={item.href}
                 onClick={() => setSidebarOpen(false)}
-                className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all duration-200 relative overflow-hidden ${
+                className={`flex items-center gap-3 px-3 py-3 rounded-md text-sm font-medium transition-all duration-200 relative overflow-hidden ${
                   isActive
-                    ? 'text-white shadow-[0_4px_20px_rgba(139,92,246,0.15)]'
-                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm'
+                    : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
                 }`}
               >
-                {/* Active Indicator Background */}
-                {isActive && (
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#8b5cf6]/20 to-[#06b6d4]/10 border border-white/10 rounded-xl pointer-events-none" />
-                )}
-                <item.icon className={`w-5 h-5 relative z-10 transition-colors ${isActive ? 'text-[#06b6d4]' : ''}`} />
+                <item.icon className={`w-5 h-5 relative z-10 transition-colors ${isActive ? 'text-sidebar-foreground' : ''}`} />
                 <span className="relative z-10 tracking-wide">{item.label}</span>
               </Link>
             );
@@ -113,10 +102,10 @@ export default function DashboardLayout({
         </nav>
 
         {/* Bottom */}
-        <div className="px-4 py-6 border-t border-white/5 space-y-1.5">
+        <div className="px-4 py-6 border-t border-sidebar-border space-y-1.5">
           <Link
             href="#"
-            className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/5 transition-all"
+            className="flex items-center gap-3 px-3 py-3 rounded-md text-sm font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all"
           >
             <HiCog6Tooth className="w-5 h-5" />
             Settings
@@ -129,7 +118,7 @@ export default function DashboardLayout({
               await fetch('/api/auth/set-role', { method: 'DELETE' });
               window.location.href = '/';
             }}
-            className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-zinc-400 hover:text-[#ec4899] hover:bg-[#ec4899]/10 transition-all w-full"
+            className="flex items-center gap-3 px-3 py-3 rounded-md text-sm font-medium text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10 transition-all w-full"
           >
             <HiArrowRightOnRectangle className="w-5 h-5" />
             Sign Out
@@ -138,24 +127,19 @@ export default function DashboardLayout({
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-h-screen relative">
+      <div className="flex-1 flex flex-col min-h-screen relative bg-background">
         {/* Top Bar */}
         <header 
-          className="sticky top-0 z-30 flex items-center justify-between px-8 py-5 border-b border-white/5 transition-all"
-          style={{
-            background: 'rgba(10, 10, 15, 0.6)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-          }}
+          className="sticky top-0 z-30 flex items-center justify-between px-8 py-5 border-b border-border bg-background/80 backdrop-blur-md transition-all"
         >
           <div className="flex items-center gap-4">
             <button
-              className="lg:hidden text-zinc-400 hover:text-white transition-colors"
+              className="lg:hidden text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => setSidebarOpen(true)}
             >
               <HiBars3 className="w-7 h-7" />
             </button>
-            <h1 className="text-xl font-bold tracking-tight hidden sm:block text-white">
+            <h1 className="text-xl font-semibold tracking-tight hidden sm:block text-foreground">
               {NAV_ITEMS.find(i => 
                 i.href === '/dashboard' 
                   ? pathname === '/dashboard' 
@@ -168,8 +152,8 @@ export default function DashboardLayout({
             <div className="hover:scale-105 transition-transform">
               <NotificationBell />
             </div>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#06b6d4] flex items-center justify-center shadow-lg shadow-purple-500/20 ring-2 ring-white/10 cursor-pointer hover:ring-white/30 transition-all">
-              <span className="text-sm font-extrabold text-white">ST</span>
+            <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-md ring-2 ring-border cursor-pointer hover:ring-primary/50 transition-all">
+              <span className="text-sm font-bold text-primary-foreground">ST</span>
             </div>
           </div>
         </header>
