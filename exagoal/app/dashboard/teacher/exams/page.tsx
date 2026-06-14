@@ -6,7 +6,7 @@ import { HiClipboardDocumentList, HiSparkles, HiPencilSquare, HiTrash, HiEye, Hi
 import { createClient } from '@/lib/supabase/client';
 import { formatTo12Hour } from '@/lib/utils/timeFormat';
 import TeacherOtpModal from '@/components/exams/TeacherOtpModal';
-
+import TeacherEditExamModal, { ExamEditData } from '@/components/exams/TeacherEditExamModal';
 interface Exam {
   id: string;
   title: string;
@@ -33,6 +33,10 @@ export default function TeacherExamsPage() {
   // OTP Modal State
   const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
   const [selectedOtpExam, setSelectedOtpExam] = useState<{ id: string, title: string } | null>(null);
+
+  // Edit Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedEditExam, setSelectedEditExam] = useState<ExamEditData | null>(null);
 
   const supabase = createClient();
 
@@ -185,6 +189,22 @@ export default function TeacherExamsPage() {
                             Publish
                           </button>
                         )}
+                        <button
+                          onClick={() => {
+                            setSelectedEditExam({
+                              id: exam.id,
+                              title: exam.title,
+                              description: exam.description,
+                              scheduled_at: exam.scheduled_at,
+                              duration_minutes: exam.duration_minutes
+                            });
+                            setIsEditModalOpen(true);
+                          }}
+                          className="p-2 text-zinc-400 hover:text-blue-400 rounded-lg hover:bg-blue-500/10 transition-colors"
+                          title="Edit"
+                        >
+                          <HiPencilSquare className="w-4 h-4" />
+                        </button>
                         {(exam.status === 'active' || exam.status === 'completed') && (
                           <button
                             onClick={() => {
@@ -222,6 +242,15 @@ export default function TeacherExamsPage() {
         onClose={() => setIsOtpModalOpen(false)}
         examId={selectedOtpExam?.id || ''}
         examTitle={selectedOtpExam?.title || ''}
+      />
+
+      <TeacherEditExamModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        exam={selectedEditExam}
+        onSave={(updated) => {
+          setExams(exams.map(e => e.id === updated.id ? { ...e, ...updated } : e));
+        }}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
@@ -9,12 +9,9 @@ import {
   HiCheckBadge,
   HiXCircle,
   HiShieldCheck,
-  HiLink,
-  HiMagnifyingGlass,
 } from 'react-icons/hi2';
 
-// Simulated verification data
-const MOCK_CREDENTIALS: Record<string, {
+interface CredentialData {
   valid: boolean;
   student_name: string;
   exam_title: string;
@@ -24,27 +21,39 @@ const MOCK_CREDENTIALS: Record<string, {
   institution: string;
   network: string;
   block_number: number;
-}> = {
-  demo: {
-    valid: true,
-    student_name: 'Sample Student',
-    exam_title: 'Advanced Mathematics — Calculus II',
-    score: 85,
-    grade: 'A',
-    issued_at: '2026-06-10T12:00:00Z',
-    institution: 'ExaGoal University',
-    network: 'Polygon PoS',
-    block_number: 52847391,
-  },
-};
+}
 
 export default function VerifyPage() {
   const params = useParams();
   const hash = params.hash as string;
-  const [loading, setLoading] = useState(false);
+  
+  const [loading, setLoading] = useState(true);
+  const [credential, setCredential] = useState<CredentialData | null>(null);
 
-  // MVP: Look up from mock data
-  const credential = MOCK_CREDENTIALS[hash] || null;
+  useEffect(() => {
+    async function verifyCredential() {
+      if (!hash) return;
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/verify/${hash}`);
+        const data = await res.json();
+        
+        if (res.ok && data.credential) {
+          setCredential(data.credential);
+        } else {
+          setCredential(null);
+        }
+      } catch (err) {
+        console.error("Verification failed", err);
+        setCredential(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    verifyCredential();
+  }, [hash]);
+
   const verified = credential?.valid ?? false;
 
   return (
@@ -54,9 +63,11 @@ export default function VerifyPage() {
         <div
           className="absolute w-[500px] h-[500px] rounded-full opacity-15"
           style={{
-            background: verified
-              ? 'radial-gradient(circle, rgba(34,197,94,0.3), transparent 70%)'
-              : 'radial-gradient(circle, rgba(239,68,68,0.3), transparent 70%)',
+            background: loading 
+              ? 'radial-gradient(circle, rgba(161,161,170,0.3), transparent 70%)'
+              : verified
+                ? 'radial-gradient(circle, rgba(34,197,94,0.3), transparent 70%)'
+                : 'radial-gradient(circle, rgba(239,68,68,0.3), transparent 70%)',
             top: '30%',
             left: '50%',
             transform: 'translateX(-50%)',
@@ -80,15 +91,20 @@ export default function VerifyPage() {
           </span>
         </div>
 
-        <div className="glass-card p-8 text-center">
-          {verified && credential ? (
+        <div className="glass-card p-8 text-center min-h-[400px] flex flex-col justify-center">
+          {loading ? (
+            <div className="py-12">
+              <div className="w-12 h-12 border-4 border-zinc-700 border-t-indigo-500 rounded-full animate-spin mx-auto mb-4" />
+              <p className="text-zinc-400 font-medium animate-pulse">Verifying blockchain credential...</p>
+            </div>
+          ) : verified && credential ? (
             <>
               {/* Verified */}
               <motion.div
                 className="w-20 h-20 rounded-2xl bg-green-500/10 flex items-center justify-center mx-auto mb-6"
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                transition={{ type: 'spring', delay: 0.2 }}
+                transition={{ type: 'spring', delay: 0.1 }}
               >
                 <HiCheckBadge className="w-10 h-10 text-green-400" />
               </motion.div>
@@ -160,7 +176,7 @@ export default function VerifyPage() {
 
           <Link
             href="/"
-            className="btn-secondary inline-flex items-center gap-2 mt-6"
+            className="btn-secondary inline-flex items-center gap-2 mt-6 justify-center w-full"
           >
             <HiArrowLeft className="w-4 h-4" />
             Back to ExaGoal

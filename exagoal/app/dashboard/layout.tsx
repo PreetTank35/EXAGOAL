@@ -16,7 +16,7 @@ import {
   HiXMark,
   HiCog6Tooth,
 } from 'react-icons/hi2';
-import OtpBanner from '@/components/notifications/OtpBanner';
+import NotificationBell from '@/components/notifications/NotificationBell';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: HiHome },
@@ -42,7 +42,6 @@ export default function DashboardLayout({
 
   return (
     <>
-      <OtpBanner />
       <div className="min-h-screen flex">
       {/* Mobile overlay */}
       {sidebarOpen && (
@@ -151,6 +150,7 @@ export default function DashboardLayout({
           <div className="hidden lg:block" />
 
           <div className="flex items-center gap-4">
+            <NotificationBell />
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
               <span className="text-xs font-bold text-white">ST</span>
             </div>

@@ -33,7 +33,7 @@ export async function POST(
     // 1. Verify Exam exists and is not already completed
     const { data: exam, error: examError } = await supabase
       .from('exams')
-      .select('id, title, duration_minutes, status, created_by')
+      .select('id, title, duration_minutes, scheduled_at, status, created_by')
       .eq('id', examId)
       .single();
 
@@ -83,12 +83,15 @@ export async function POST(
         student_id: student.id,
         exam_id: examId,
         title: `Exam Access: ${exam.title}`,
-        message: `Your exam access code is ${otpCode}. It expires in 15 minutes.`,
+        message: `Your exam access code is ${otpCode}.`,
         notification_type: 'otp_delivery',
         is_read: false,
         status: 'active',
         expires_at: expiresAt.toISOString(),
-        metadata: { otp_code: otpCode }
+        metadata: { 
+          otp_code: otpCode,
+          exam_scheduled_at: exam.scheduled_at
+        }
       });
     }
 
