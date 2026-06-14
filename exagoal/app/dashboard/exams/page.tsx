@@ -94,14 +94,13 @@ export default function ExamsPage() {
   useEffect(() => {
     loadExams();
 
-    // Subscribe to real-time changes on exams table
+    // Subscribe to real-time changes on exams table (all relevant statuses)
     const channel = supabase
-      .channel('published-exams')
+      .channel('student-exams')
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'exams',
-        filter: 'status=eq.published',
       }, () => {
         loadExams(); // Reload when any exam changes
       })
@@ -111,11 +110,11 @@ export default function ExamsPage() {
   }, []);
 
   async function loadExams() {
-    // Students see all published exams
-    const { data, error } = await supabase
+    // Students see all published, active, and draft exams (upcoming ones)
+    const { data } = await supabase
       .from('exams')
       .select('*')
-      .in('status', ['published', 'active'])
+      .in('status', ['draft', 'published', 'active'])
       .order('scheduled_at', { ascending: true });
 
     if (data) setExams(data);
@@ -194,16 +193,22 @@ export default function ExamsPage() {
           )}
 
           {/* Upcoming */}
-          {upcoming.length > 0 && (
-            <div>
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-4">📅 Upcoming</h2>
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-indigo-400 mb-4">📅 Upcoming Exams</h2>
+            {upcoming.length > 0 ? (
               <AnimatedList
                 items={upcoming}
                 renderItem={(exam, idx) => <ExamCard exam={exam} idx={idx} />}
                 displayScrollbar={false}
               />
-            </div>
-          )}
+            ) : (
+              <div className="glass-card p-8 text-center">
+                <HiClipboardDocumentList className="w-8 h-8 mx-auto mb-3 text-zinc-600" />
+                <p className="text-zinc-400 font-medium text-sm">No upcoming exams scheduled</p>
+                <p className="text-xs text-zinc-500 mt-1">New exams will appear here once your teachers create them.</p>
+              </div>
+            )}
+          </div>
 
           {/* Past */}
           {pastExams.length > 0 && (

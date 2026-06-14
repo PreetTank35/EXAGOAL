@@ -79,7 +79,7 @@ export default function DashboardPage() {
       const { data } = await supabase
         .from('exams')
         .select('id, title, exam_type, scheduled_at, duration_minutes, status, available_until')
-        .in('status', ['published', 'active'])
+        .in('status', ['draft', 'published', 'active'])
         .gte('scheduled_at', new Date().toISOString())
         .order('scheduled_at', { ascending: true })
         .limit(5);
