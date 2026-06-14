@@ -2,22 +2,94 @@ import { NextResponse } from 'next/server';
 
 export const maxDuration = 60;
 
+/**
+ * Aggressively extract JSON from AI responses that may contain:
+ * - <think>...</think> reasoning blocks
+ * - ```json ... ``` markdown fences
+ * - Leading/trailing prose or explanation text
+ * - Partial or truncated JSON
+ */
 function extractJSON(raw: string): string {
-  // Remove reasoning blocks (common in models like DeepSeek-R1 or Nemotron Reasoning)
+  // 1. Strip reasoning blocks (<think>...</think>)
   let cleaned = raw.replace(/<think>[\s\S]*?<\/think>/gi, '');
 
-  // Remove markdown code blocks (```json ... ``` or ``` ... ```)
-  cleaned = cleaned.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  // 2. Try to extract from markdown code fences first (most reliable)
+  const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)```/i);
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim();
+  } else {
+    // 3. Remove any remaining markdown artifacts
+    cleaned = cleaned.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  }
 
-  // Find the outermost JSON object
+  // 4. Find the outermost JSON object using brace matching
   const firstBrace = cleaned.indexOf('{');
-  const lastBrace = cleaned.lastIndexOf('}');
-
-  if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
+  if (firstBrace === -1) {
     throw new Error('No JSON object found in response');
   }
 
-  return cleaned.substring(firstBrace, lastBrace + 1);
+  // Walk forward and count braces to find the matching closing brace
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = firstBrace; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (ch === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === '{') depth++;
+    if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        return cleaned.substring(firstBrace, i + 1);
+      }
+    }
+  }
+
+  // If braces didn't balance, try lastIndexOf as a fallback
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (lastBrace > firstBrace) {
+    return cleaned.substring(firstBrace, lastBrace + 1);
+  }
+
+  throw new Error('Unbalanced JSON braces in response');
+}
+
+/**
+ * Attempt to repair common JSON issues from LLM output:
+ * - Trailing commas
+ * - Single quotes instead of double quotes
+ * - Unquoted keys
+ */
+function repairJSON(raw: string): string {
+  let fixed = raw;
+
+  // Remove trailing commas before } or ]
+  fixed = fixed.replace(/,\s*([}\]])/g, '$1');
+
+  // Replace single-quoted strings with double-quoted (simple heuristic)
+  // Only do this if there are no double quotes at all
+  if (!fixed.includes('"') && fixed.includes("'")) {
+    fixed = fixed.replace(/'/g, '"');
+  }
+
+  return fixed;
 }
 
 export async function POST(req: Request) {
@@ -62,41 +134,23 @@ export async function POST(req: Request) {
       })
       .join(', ');
 
-    // Tight, explicit schema in the prompt for fast + accurate generation
-    const systemPrompt = `You are an expert exam question generator. You MUST respond with ONLY a valid JSON object — no markdown, no explanation, no code fences.
+    const systemPrompt = `You are an expert exam question generator. You MUST respond with ONLY a valid JSON object — no markdown, no explanation, no code fences, no thinking, no preamble.
 
 Generate exactly ${question_count} questions of type: ${typesInstruction}.
 Difficulty: ${difficultyMap[difficulty] || difficultyMap.medium}
 Topic/Syllabus context is provided by the user.
 
-Required JSON schema (respond with this exact structure):
-{
-  "questions": [
-    {
-      "question_text": "string",
-      "question_type": "mcq" | "short_answer" | "essay",
-      "options": [
-        {"id": "a", "text": "string", "is_correct": false},
-        {"id": "b", "text": "string", "is_correct": true},
-        {"id": "c", "text": "string", "is_correct": false},
-        {"id": "d", "text": "string", "is_correct": false}
-      ],
-      "correct_answer": "b",
-      "max_marks": 1,
-      "difficulty_level": 3,
-      "bloom_taxonomy": "understand"
-    }
-  ]
-}
+Required JSON schema (respond with ONLY this structure):
+{"questions":[{"question_text":"string","question_type":"mcq","options":[{"id":"a","text":"string","is_correct":false},{"id":"b","text":"string","is_correct":true},{"id":"c","text":"string","is_correct":false},{"id":"d","text":"string","is_correct":false}],"correct_answer":"b","max_marks":1,"difficulty_level":3,"bloom_taxonomy":"understand"}]}
 
 Rules:
 - For MCQ: always include all 4 options with ids a/b/c/d; exactly one is_correct = true.
 - For short_answer or essay: omit the "options" field entirely. Set correct_answer to a model answer.
 - difficulty_level is 1-5 (1=easiest, 5=hardest).
 - bloom_taxonomy is one of: remember, understand, apply, analyze, evaluate, create.
-- Return ONLY the JSON. No preamble, no suffix.`;
+- Return ONLY the JSON object. No other text.`;
 
-    // Use reliable and fast models on OpenRouter
+    // Models to try in order — primary + reliable fallbacks
     const MODELS = [
       'google/gemma-4-31b-it:free',
       'google/gemini-2.0-flash-lite-preview-02-05:free'
@@ -104,10 +158,13 @@ Rules:
 
     let rawContent = '';
     let lastError = '';
+    let usedModel = '';
 
     for (const model of MODELS) {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout per model
+      // Give Gemma more time (30s) since it's a larger model
+      const timeoutMs = model.includes('gemma') ? 30000 : 20000;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
       
       try {
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -127,8 +184,9 @@ Rules:
                 content: `Generate ${question_count} questions based on this syllabus:\n\n${syllabus_text.substring(0, 5000)}`,
               },
             ],
-            temperature: 0.2,
-            max_tokens: 3000,
+            temperature: 0.1,
+            max_tokens: 4096,
+            top_p: 0.9,
           }),
           signal: controller.signal,
         });
@@ -137,21 +195,28 @@ Rules:
 
         if (!response.ok) {
           const err = await response.json().catch(() => ({}));
-          lastError = err?.error?.message || `Model ${model} returned ${response.status}`;
-          continue; // try next model
+          lastError = (err as Record<string, Record<string, string>>)?.error?.message || `Model ${model} returned ${response.status}`;
+          console.error(`[generate-exam] ${model} HTTP error:`, lastError);
+          continue;
         }
 
         const data = await response.json();
         rawContent = data.choices?.[0]?.message?.content || '';
 
         if (rawContent.trim()) {
-          break; // Got a response, stop trying models
+          usedModel = model;
+          break;
         } else {
           lastError = `Model ${model} returned an empty response`;
+          console.error(`[generate-exam] ${model}: empty response`);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         clearTimeout(timeoutId);
-        lastError = err.name === 'AbortError' ? `Model ${model} timed out after 15s` : err.message;
+        const error = err instanceof Error ? err : new Error(String(err));
+        lastError = error.name === 'AbortError' 
+          ? `Model ${model} timed out after ${timeoutMs / 1000}s` 
+          : error.message;
+        console.error(`[generate-exam] ${model} exception:`, lastError);
         continue;
       }
     }
@@ -163,34 +228,51 @@ Rules:
       );
     }
 
-    // Parse with aggressive JSON extraction
-    let parsed: any;
+    // Parse with multi-stage JSON extraction
+    let parsed: Record<string, unknown>;
+
+    // Stage 1: Try extractJSON (handles think blocks, fences, brace matching)
     try {
       const jsonString = extractJSON(rawContent);
       parsed = JSON.parse(jsonString);
     } catch {
-      // Last resort: try parsing the raw content directly
+      // Stage 2: Try with JSON repair (trailing commas, etc.)
       try {
-        parsed = JSON.parse(rawContent.trim());
+        const jsonString = extractJSON(rawContent);
+        const repaired = repairJSON(jsonString);
+        parsed = JSON.parse(repaired);
       } catch {
-        console.error('Malformed AI response:', rawContent.substring(0, 1000));
-        return NextResponse.json(
-          {
-            error: 'AI returned malformed JSON. The AI model may be overloaded — please try again in a moment.',
-            debug: rawContent.substring(0, 300),
-          },
-          { status: 422 }
-        );
+        // Stage 3: Try parsing raw content directly
+        try {
+          parsed = JSON.parse(rawContent.trim());
+        } catch {
+          // Stage 4: Try repairing raw content
+          try {
+            const repaired = repairJSON(rawContent.trim());
+            parsed = JSON.parse(repaired);
+          } catch {
+            console.error(`[generate-exam] All JSON parsing failed. Model: ${usedModel}`);
+            console.error(`[generate-exam] Raw response (first 500 chars):`, rawContent.substring(0, 500));
+            return NextResponse.json(
+              {
+                error: 'AI returned malformed JSON. Please try again — the model may be overloaded.',
+                debug: rawContent.substring(0, 300),
+              },
+              { status: 422 }
+            );
+          }
+        }
       }
     }
 
     // Validate and normalise questions array
     if (!parsed.questions || !Array.isArray(parsed.questions)) {
       // Some models wrap questions differently — try to find any array
-      const maybeArray = Object.values(parsed).find(Array.isArray) as any[] | undefined;
+      const maybeArray = Object.values(parsed).find(Array.isArray) as Record<string, unknown>[] | undefined;
       if (maybeArray) {
         parsed.questions = maybeArray;
       } else {
+        console.error(`[generate-exam] No questions array found. Keys:`, Object.keys(parsed));
         return NextResponse.json(
           { error: 'AI did not return a questions array. Please try again.' },
           { status: 422 }
@@ -199,7 +281,8 @@ Rules:
     }
 
     // Stamp order_index on each question
-    parsed.questions = parsed.questions.map((q: any, i: number) => ({
+    const questions = parsed.questions as Record<string, unknown>[];
+    parsed.questions = questions.map((q, i) => ({
       ...q,
       order_index: i + 1,
     }));
@@ -208,13 +291,14 @@ Rules:
       success: true,
       exam_title: exam_title || 'AI Generated Exam',
       duration_minutes: duration_minutes || 60,
-      question_count: parsed.questions.length,
+      question_count: (parsed.questions as unknown[]).length,
       ...parsed,
     });
-  } catch (error: any) {
-    console.error('AI Exam Generation Error:', error);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error('AI Exam Generation Error:', err);
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: err.message || 'Internal server error' },
       { status: 500 }
     );
   }
