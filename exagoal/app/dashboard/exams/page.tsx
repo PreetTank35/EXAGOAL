@@ -9,6 +9,7 @@ import {
   HiClipboardDocumentList,
 } from 'react-icons/hi2';
 import { createClient } from '@/lib/supabase/client';
+import { formatTo12Hour } from '@/lib/utils/timeFormat';
 
 interface Exam {
   id: string;
@@ -250,13 +251,16 @@ function ExamCard({ exam, idx }: { exam: Exam; idx: number }) {
         {exam.description || 'No description provided.'}
       </p>
 
-      <div className="flex items-center gap-4 text-xs text-zinc-500 mb-4">
-        <span className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-500 mb-4">
+        <span className="flex items-center gap-1" title="Scheduled Start Time">
           <HiClock className="w-3.5 h-3.5" />
+          {new Date(exam.scheduled_at).toLocaleDateString()} <span className="font-semibold text-zinc-300">{formatTo12Hour(exam.scheduled_at)}</span>
+        </span>
+        <span className="flex items-center gap-1 px-2 py-0.5 bg-zinc-800 rounded-md">
           {exam.duration_minutes} min
         </span>
         {exam.is_adaptive && (
-          <span className="text-cyan-400 font-medium">⚡ Adaptive</span>
+          <span className="text-cyan-400 font-medium bg-cyan-500/10 px-2 py-0.5 rounded-md">⚡ Adaptive</span>
         )}
       </div>
 

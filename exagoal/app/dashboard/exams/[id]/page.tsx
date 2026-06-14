@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { HiShieldCheck, HiClock, HiArrowRight, HiChevronLeft } from 'react-icons/hi2';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { formatTo12Hour } from '@/lib/utils/timeFormat';
 
 export default function ExamDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -103,9 +104,12 @@ export default function ExamDetailsPage({ params }: { params: Promise<{ id: stri
         <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-300 mb-8 p-4 rounded-xl bg-zinc-900/50 border border-zinc-800">
           <span className="flex items-center gap-1.5 font-medium">
             <HiClock className="w-4 h-4 text-indigo-400" />
+            Scheduled for {new Date(exam.scheduled_at).toLocaleDateString()} at {formatTo12Hour(exam.scheduled_at)}
+          </span>
+          <span className="flex items-center gap-1.5 font-medium border-l border-zinc-700 pl-4">
             {exam.duration_minutes} Minutes
           </span>
-          <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 font-medium capitalize">
+          <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 font-medium capitalize border-l border-zinc-700 ml-2 pl-4">
             {exam.exam_type}
           </span>
         </div>

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { HiSparkles, HiChevronRight, HiCheckCircle, HiChevronLeft, HiPencilSquare, HiTrash } from 'react-icons/hi2';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import TimePicker from '@/components/ui/TimePicker';
+import { createDateFrom12Hour, isWithinOperatingHours } from '@/lib/utils/timeFormat';
 
 interface Syllabus {
   id: string;
@@ -40,8 +42,19 @@ export default function GenerateExamPage() {
   const [difficulty, setDifficulty] = useState('medium');
   const [examTitle, setExamTitle] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(60);
-  const [scheduledAt, setScheduledAt] = useState('');
-  const [availableUntil, setAvailableUntil] = useState('');
+  
+  // Schedule state
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const [schedDate, setSchedDate] = useState(tomorrow);
+  const [schedHour, setSchedHour] = useState(9);
+  const [schedMinute, setSchedMinute] = useState(0);
+  const [schedAmPm, setSchedAmPm] = useState<'AM' | 'PM'>('AM');
+
+  const [availDate, setAvailDate] = useState(tomorrow);
+  const [availHour, setAvailHour] = useState(5);
+  const [availMinute, setAvailMinute] = useState(0);
+  const [availAmPm, setAvailAmPm] = useState<'AM' | 'PM'>('PM');
+
   const [strictSubmission, setStrictSubmission] = useState(true);
 
   // Generated output
@@ -137,13 +150,22 @@ export default function GenerateExamPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Convert local datetime string to UTC ISO string to prevent timezone bugs
-      const scheduledIso = scheduledAt ? new Date(scheduledAt).toISOString() : new Date(Date.now() + 86400000).toISOString();
-      const availableIso = availableUntil ? new Date(availableUntil).toISOString() : new Date(new Date(scheduledIso).getTime() + 86400000).toISOString();
+      const schedLocal = createDateFrom12Hour(schedDate, schedHour, schedMinute, schedAmPm);
+      const availLocal = createDateFrom12Hour(availDate, availHour, availMinute, availAmPm);
 
-      if (new Date(availableIso) <= new Date(scheduledIso)) {
+      if (!isWithinOperatingHours(schedLocal)) {
+        throw new Error('Scheduled start time must be between 6:00 AM and 10:00 PM.');
+      }
+      if (!isWithinOperatingHours(availLocal)) {
+        throw new Error('Availability end time must be between 6:00 AM and 10:00 PM.');
+      }
+
+      if (availLocal <= schedLocal) {
         throw new Error('Availability end time must be after the scheduled start time.');
       }
+
+      const scheduledIso = schedLocal.toISOString();
+      const availableIso = availLocal.toISOString();
 
       // 1. Create the exam record
       const { data: exam, error: examError } = await supabase
@@ -297,15 +319,29 @@ export default function GenerateExamPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Schedule Start Date & Time</label>
-                <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Available Until (End Time)</label>
-                <input type="datetime-local" value={availableUntil} onChange={(e) => setAvailableUntil(e.target.value)} className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500" />
-              </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 bg-zinc-900/20 p-4 rounded-xl border border-zinc-800/50">
+              <TimePicker
+                label="Schedule Start Date & Time"
+                date={schedDate}
+                hour={schedHour}
+                minute={schedMinute}
+                ampm={schedAmPm}
+                onDateChange={setSchedDate}
+                onHourChange={setSchedHour}
+                onMinuteChange={setSchedMinute}
+                onAmPmChange={setSchedAmPm}
+              />
+              <TimePicker
+                label="Available Until (End Time)"
+                date={availDate}
+                hour={availHour}
+                minute={availMinute}
+                ampm={availAmPm}
+                onDateChange={setAvailDate}
+                onHourChange={setAvailHour}
+                onMinuteChange={setAvailMinute}
+                onAmPmChange={setAvailAmPm}
+              />
             </div>
 
             <label className="flex items-center gap-3 p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 cursor-pointer hover:border-zinc-700 transition-colors">

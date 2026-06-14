@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { HiClipboardDocumentList, HiSparkles, HiPencilSquare, HiTrash, HiEye, HiDocumentDuplicate } from 'react-icons/hi2';
 import { createClient } from '@/lib/supabase/client';
+import { formatTo12Hour } from '@/lib/utils/timeFormat';
 
 interface Exam {
   id: string;
@@ -147,7 +148,10 @@ export default function TeacherExamsPage() {
                     </td>
                     <td className="px-6 py-4 text-zinc-400">{exam.duration_minutes} min</td>
                     <td className="px-6 py-4 text-zinc-400 text-xs">
-                      {new Date(exam.scheduled_at).toLocaleString()}
+                      {new Date(exam.scheduled_at).toLocaleDateString()}{' '}
+                      <span className="font-semibold text-zinc-300">
+                        {formatTo12Hour(exam.scheduled_at)}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-1">
