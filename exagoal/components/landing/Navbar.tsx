@@ -65,6 +65,7 @@ export function Navbar() {
       menuColor="#fff"
       buttonBgColor="#8b5cf6"
       buttonTextColor="#fff"
+      buttonHref="/register"
       ease="power3.out"
       className="fixed top-5 left-1/2 -translate-x-1/2 w-full max-w-6xl z-50 transition-all duration-500"
     />

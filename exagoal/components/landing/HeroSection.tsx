@@ -1,5 +1,6 @@
 import { useRef } from "react";
-import { motion, useScroll, useTransform } from "motion/react";
+import Link from "next/link";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { ArrowRight, Play } from "lucide-react";
 
 function FloatingOrb({
@@ -293,8 +294,8 @@ export function HeroSection() {
             transition={{ duration: 0.7, delay: 0.44 }}
             className="flex flex-wrap items-center gap-4"
           >
-            <a
-              href="#"
+            <Link
+              href="/register"
               className="relative group flex items-center gap-2.5 px-7 py-3.5 rounded-xl text-white overflow-hidden"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: "0.95rem" }}
             >
@@ -303,7 +304,7 @@ export function HeroSection() {
               <span className="absolute inset-0 rounded-xl shadow-[0_0_24px_rgba(139,92,246,0.5)] group-hover:shadow-[0_0_40px_rgba(139,92,246,0.75)] transition-all duration-300" />
               <span className="relative">Start for free</span>
               <ArrowRight size={16} className="relative group-hover:translate-x-0.5 transition-transform duration-200" />
-            </a>
+            </Link>
 
             <a
               href="#"

@@ -1,5 +1,6 @@
-import { motion, useInView } from "motion/react";
+import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
+import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 export function CTASection() {
@@ -86,8 +87,8 @@ export function CTASection() {
               </div>
 
               <div className="flex flex-wrap items-center justify-center gap-4">
-                <a
-                  href="#"
+                <Link
+                  href="/register"
                   className="relative group flex items-center gap-2.5 px-8 py-4 rounded-xl text-white overflow-hidden"
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: "1rem" }}
                 >
@@ -96,7 +97,7 @@ export function CTASection() {
                   <span className="absolute inset-0 rounded-xl shadow-[0_0_30px_rgba(139,92,246,0.6)] group-hover:shadow-[0_0_50px_rgba(139,92,246,0.8)] transition-all duration-300" />
                   <span className="relative">Get started for free</span>
                   <ArrowRight size={18} className="relative group-hover:translate-x-1 transition-transform duration-200" />
-                </a>
+                </Link>
 
                 <a
                   href="#"

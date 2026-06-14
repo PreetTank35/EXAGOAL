@@ -1,6 +1,7 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState, ReactNode } from 'react';
+import Link from 'next/link';
 import { gsap } from 'gsap';
 import { GoArrowUpRight } from 'react-icons/go';
 import './CardNav.css';
@@ -28,6 +29,7 @@ export interface CardNavProps {
   menuColor?: string;
   buttonBgColor?: string;
   buttonTextColor?: string;
+  buttonHref?: string;
 }
 
 const CardNav = ({
@@ -39,7 +41,8 @@ const CardNav = ({
   baseColor = '#fff',
   menuColor,
   buttonBgColor = '#111',
-  buttonTextColor = 'white'
+  buttonTextColor = 'white',
+  buttonHref
 }: CardNavProps) => {
   const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -183,13 +186,25 @@ const CardNav = ({
             )}
           </div>
 
-          <button
-            type="button"
-            className="card-nav-cta-button"
-            style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
-          >
-            Get Started
-          </button>
+          {buttonHref ? (
+            <Link href={buttonHref} className="h-full flex items-center justify-center">
+              <button
+                type="button"
+                className="card-nav-cta-button"
+                style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
+              >
+                Get Started
+              </button>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              className="card-nav-cta-button"
+              style={{ backgroundColor: buttonBgColor, color: buttonTextColor }}
+            >
+              Get Started
+            </button>
+          )}
         </div>
 
         <div className="card-nav-content" aria-hidden={!isExpanded}>
