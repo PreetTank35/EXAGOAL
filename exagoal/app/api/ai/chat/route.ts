@@ -22,9 +22,9 @@ export async function POST(req: Request) {
         'X-Title': 'ExaGoal AI Tutor',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash:free',
+        model: 'google/gemma-4-31b-it:free',
         messages: [
-          { role: 'system', content: `You are the ExaGoal AI Tutor, powered by Google Gemini. You are highly intelligent, encouraging, and focused on helping students understand concepts deeply. Keep your responses concise, well-structured, and friendly. When writing math formulas, always use LaTeX formatting with $ for inline math and $$ for block math.` },
+          { role: 'system', content: `You are the ExaGoal AI Tutor, powered by Google Gemma. You are highly intelligent, encouraging, and focused on helping students understand concepts deeply. Keep your responses concise, well-structured, and friendly. When writing math formulas, always use LaTeX formatting with $ for inline math and $$ for block math.` },
           ...messages
         ],
         temperature: 0.7,

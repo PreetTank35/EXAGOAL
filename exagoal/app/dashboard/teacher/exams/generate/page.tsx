@@ -223,7 +223,7 @@ export default function GenerateExamPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">AI Exam Generation</h1>
         <p className="text-sm text-zinc-400 mt-1">
-          Generate high-quality exams from your uploaded syllabi using Google Gemini.
+          Generate high-quality exams from your uploaded syllabi using Google Gemma.
         </p>
       </div>
 
@@ -373,7 +373,7 @@ export default function GenerateExamPage() {
               <HiSparkles className="w-8 h-8 text-white animate-spin" style={{ animationDuration: '3s' }} />
             </div>
           </div>
-          <h2 className="text-xl font-bold mt-6 mb-2">Gemini is generating your exam...</h2>
+          <h2 className="text-xl font-bold mt-6 mb-2">Gemma is generating your exam...</h2>
           <p className="text-sm text-zinc-400 max-w-md mx-auto mb-8">
             Analyzing your syllabus and drafting {questionCount} {difficulty}-difficulty questions.
           </p>

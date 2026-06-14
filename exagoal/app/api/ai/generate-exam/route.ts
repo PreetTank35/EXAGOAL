@@ -98,7 +98,7 @@ Rules:
 
     // Use reliable and fast models on OpenRouter
     const MODELS = [
-      'google/gemini-2.5-flash:free',
+      'google/gemma-4-31b-it:free',
       'google/gemini-2.0-flash-lite-preview-02-05:free'
     ];
 

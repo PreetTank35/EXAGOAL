@@ -77,7 +77,7 @@ export default function TeacherOverviewPage() {
             <div className="p-4 rounded-xl border border-zinc-800/50 bg-zinc-900/50 flex justify-between items-center">
               <div>
                 <p className="font-medium text-sm">2. Generate an Exam with AI</p>
-                <p className="text-xs text-zinc-400 mt-1">Use Google Gemini to auto-generate questions from your syllabus.</p>
+                <p className="text-xs text-zinc-400 mt-1">Use Google Gemma to auto-generate questions from your syllabus.</p>
               </div>
               <Link href="/dashboard/teacher/exams/generate" className="text-xs text-rose-400 font-medium hover:text-rose-300">Go →</Link>
             </div>
