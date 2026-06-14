@@ -223,7 +223,7 @@ export default function GenerateExamPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">AI Exam Generation</h1>
         <p className="text-sm text-zinc-400 mt-1">
-          Generate high-quality exams from your uploaded syllabi using Nemotron 120B.
+          Generate high-quality exams from your uploaded syllabi using Nemotron 30B.
         </p>
       </div>
 

@@ -97,8 +97,8 @@ Rules:
     // Use reliable and fast models on OpenRouter
     const MODELS = [
       'google/gemini-2.0-flash-lite-preview-02-05:free',
-      'google/gemini-2.0-flash-exp:free',
-      'nvidia/llama-3.1-nemotron-70b-instruct:free'
+      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+      'google/gemini-2.0-flash-exp:free'
     ];
 
     let rawContent = '';
