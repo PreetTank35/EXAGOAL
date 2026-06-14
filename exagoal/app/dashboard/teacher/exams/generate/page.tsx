@@ -41,6 +41,8 @@ export default function GenerateExamPage() {
   const [examTitle, setExamTitle] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(60);
   const [scheduledAt, setScheduledAt] = useState('');
+  const [availableUntil, setAvailableUntil] = useState('');
+  const [strictSubmission, setStrictSubmission] = useState(true);
 
   // Generated output
   const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
@@ -135,6 +137,14 @@ export default function GenerateExamPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      // Convert local datetime string to UTC ISO string to prevent timezone bugs
+      const scheduledIso = scheduledAt ? new Date(scheduledAt).toISOString() : new Date(Date.now() + 86400000).toISOString();
+      const availableIso = availableUntil ? new Date(availableUntil).toISOString() : new Date(new Date(scheduledIso).getTime() + 86400000).toISOString();
+
+      if (new Date(availableIso) <= new Date(scheduledIso)) {
+        throw new Error('Availability end time must be after the scheduled start time.');
+      }
+
       // 1. Create the exam record
       const { data: exam, error: examError } = await supabase
         .from('exams')
@@ -144,7 +154,9 @@ export default function GenerateExamPage() {
           created_by: user.id,
           exam_type: 'knowledge',
           duration_minutes: durationMinutes,
-          scheduled_at: scheduledAt || new Date(Date.now() + 86400000).toISOString(), // Default: tomorrow
+          scheduled_at: scheduledIso,
+          available_until: availableIso,
+          strict_submission: strictSubmission,
           status: 'published',
         })
         .select()
@@ -285,10 +297,24 @@ export default function GenerateExamPage() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">Schedule Date & Time</label>
-              <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">Schedule Start Date & Time</label>
+                <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">Available Until (End Time)</label>
+                <input type="datetime-local" value={availableUntil} onChange={(e) => setAvailableUntil(e.target.value)} className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500" />
+              </div>
             </div>
+
+            <label className="flex items-center gap-3 p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 cursor-pointer hover:border-zinc-700 transition-colors">
+              <input type="checkbox" checked={strictSubmission} onChange={(e) => setStrictSubmission(e.target.checked)} className="w-4 h-4 rounded border-zinc-700 text-rose-500 focus:ring-rose-500 bg-zinc-900" />
+              <div>
+                <p className="font-medium text-sm text-zinc-200">Strict Automatic Submission</p>
+                <p className="text-xs text-zinc-500 mt-0.5">Automatically submit the exam when the duration expires or availability window ends.</p>
+              </div>
+            </label>
 
             <div className="pt-4 border-t border-zinc-800/50 flex justify-end">
               <button 

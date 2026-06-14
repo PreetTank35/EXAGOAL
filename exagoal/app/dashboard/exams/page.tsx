@@ -19,6 +19,8 @@ interface Exam {
   scheduled_at: string;
   status: string;
   is_adaptive: boolean;
+  available_until?: string;
+  strict_submission?: boolean;
 }
 
 function getExamTypeColor(type: string) {
@@ -52,15 +54,32 @@ function getStatusStyle(status: string) {
   }
 }
 
-function getTimeLabel(scheduledAt: string): string {
-  const now = new Date();
+function ExamCountdown({ scheduledAt, availableUntil }: { scheduledAt: string; availableUntil?: string }) {
+  const [now, setNow] = useState(new Date());
+  
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const scheduled = new Date(scheduledAt);
   const diff = scheduled.getTime() - now.getTime();
-
-  if (diff < 0) return 'In Progress';
-  if (diff < 3600000) return `Starts in ${Math.ceil(diff / 60000)} min`;
-  if (diff < 86400000) return `Starts in ${Math.ceil(diff / 3600000)} hours`;
-  return scheduled.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  
+  if (diff > 0) {
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    return <span className="font-mono text-zinc-400">Starts in {h}h {m}m {s}s</span>;
+  }
+  
+  if (availableUntil) {
+    const end = new Date(availableUntil);
+    if (now > end) {
+      return <span className="text-red-400 font-semibold">Closed</span>;
+    }
+  }
+  
+  return <span className="text-emerald-400 font-semibold animate-pulse">Open Now</span>;
 }
 
 export default function ExamsPage() {
@@ -111,12 +130,12 @@ export default function ExamsPage() {
   const upcoming = filteredExams.filter(e => new Date(e.scheduled_at) > now);
   const inProgress = filteredExams.filter(e => {
     const start = new Date(e.scheduled_at);
-    const end = new Date(start.getTime() + e.duration_minutes * 60000);
+    const end = e.available_until ? new Date(e.available_until) : new Date(start.getTime() + e.duration_minutes * 60000);
     return now >= start && now <= end;
   });
   const pastExams = filteredExams.filter(e => {
     const start = new Date(e.scheduled_at);
-    const end = new Date(start.getTime() + e.duration_minutes * 60000);
+    const end = e.available_until ? new Date(e.available_until) : new Date(start.getTime() + e.duration_minutes * 60000);
     return now > end;
   });
 
@@ -243,14 +262,27 @@ function ExamCard({ exam, idx }: { exam: Exam; idx: number }) {
 
       <div className="flex items-center justify-between pt-4 border-t border-zinc-800/50">
         <span className="text-xs text-zinc-500">
-          {getTimeLabel(exam.scheduled_at)}
+          <ExamCountdown scheduledAt={exam.scheduled_at} availableUntil={exam.available_until} />
         </span>
-        <Link
-          href={`/dashboard/exams/${exam.id}`}
-          className="text-xs font-medium text-indigo-400 hover:text-indigo-300"
-        >
-          View Details →
-        </Link>
+        {(() => {
+            const now = new Date();
+            const start = new Date(exam.scheduled_at);
+            const end = exam.available_until ? new Date(exam.available_until) : new Date(start.getTime() + exam.duration_minutes * 60000);
+            const isOpen = now >= start && now <= end;
+            
+            return isOpen ? (
+              <Link
+                href={`/dashboard/exams/${exam.id}`}
+                className="text-xs font-medium text-indigo-400 hover:text-indigo-300"
+              >
+                View Details →
+              </Link>
+            ) : (
+              <span className="text-xs font-medium text-zinc-600 cursor-not-allowed">
+                {now < start ? 'Not Started' : 'Ended'}
+              </span>
+            );
+        })()}
       </div>
     </motion.div>
   );

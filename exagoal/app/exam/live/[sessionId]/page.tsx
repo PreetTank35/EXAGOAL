@@ -102,14 +102,21 @@ export default function LiveExamPage() {
   // Enable exam lockdown
   useExamLockdown('demo-session', !showLockdownWarning);
 
-  // Timer countdown
+  // Timer countdown and strict submission
   useEffect(() => {
-    if (timeLeft <= 0 || showLockdownWarning) return;
+    if (timeLeft <= 0) {
+      if (!submitting) {
+        handleSubmit();
+      }
+      return;
+    }
+    if (showLockdownWarning) return;
+
     const timer = setInterval(() => {
       setTimeLeft((prev) => prev - 1);
     }, 1000);
     return () => clearInterval(timer);
-  }, [timeLeft, showLockdownWarning]);
+  }, [timeLeft, showLockdownWarning, submitting]);
 
   const formatTime = useCallback((seconds: number) => {
     const h = Math.floor(seconds / 3600);
