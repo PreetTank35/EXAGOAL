@@ -83,19 +83,19 @@ export default function TeacherExamsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Exam Management</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Exam Management</h1>
           <p className="text-sm text-zinc-400 mt-1">Create, manage, and track all your examinations.</p>
         </div>
         <Link
           href="/dashboard/teacher/exams/generate"
-          className="flex items-center gap-2 px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white rounded-lg font-medium text-sm transition-colors"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white rounded-lg font-medium text-sm transition-colors w-full sm:w-auto"
         >
           <HiSparkles className="w-4 h-4" /> Generate with AI
         </Link>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap overflow-x-auto no-scrollbar -mx-1 px-1">
         {['all', 'draft', 'published', 'active', 'completed'].map(f => (
           <button
             key={f}
@@ -125,119 +125,218 @@ export default function TeacherExamsPage() {
             <p className="text-sm">Use AI to generate your first exam from an uploaded syllabus.</p>
           </div>
         ) : (
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-zinc-400 uppercase bg-zinc-900/30 border-b border-zinc-800/50">
-              <tr>
-                <th className="px-6 py-3 font-medium">Exam</th>
-                <th className="px-6 py-3 font-medium">Status</th>
-                <th className="px-6 py-3 font-medium">Duration</th>
-                <th className="px-6 py-3 font-medium">Scheduled</th>
-                <th className="px-6 py-3 font-medium text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/50">
+          <>
+            {/* Desktop Table (hidden on mobile) */}
+            <div className="hidden md:block">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs text-zinc-400 uppercase bg-zinc-900/30 border-b border-zinc-800/50">
+                  <tr>
+                    <th className="px-6 py-3 font-medium">Exam</th>
+                    <th className="px-6 py-3 font-medium">Status</th>
+                    <th className="px-6 py-3 font-medium">Duration</th>
+                    <th className="px-6 py-3 font-medium">Scheduled</th>
+                    <th className="px-6 py-3 font-medium text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50">
+                  {filteredExams.map(exam => {
+                    const style = STATUS_STYLES[exam.status] || STATUS_STYLES.draft;
+                    return (
+                      <tr key={exam.id} className="hover:bg-zinc-800/20 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-rose-500/10 rounded-lg">
+                              <HiClipboardDocumentList className="w-4 h-4 text-rose-400" />
+                            </div>
+                            <div>
+                              <p className="font-medium">{exam.title}</p>
+                              <p className="text-xs text-zinc-500">{exam.exam_type}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${style.bg} ${style.text}`}>
+                            {style.label}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-zinc-400">{exam.duration_minutes} min</td>
+                        <td className="px-6 py-4 text-zinc-400 text-xs">
+                          {new Date(exam.scheduled_at).toLocaleDateString()}{' '}
+                          <span className="font-semibold text-zinc-300">
+                            {formatTo12Hour(exam.scheduled_at)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-1">
+                            {exam.status !== 'completed' && exam.status !== 'archived' && exam.status !== 'active' && (
+                              <button
+                                onClick={async () => {
+                                  const res = await fetch(`/api/exams/${exam.id}/launch`, { method: 'POST' });
+                                  if (res.ok) {
+                                    setExams(exams.map(e => e.id === exam.id ? { ...e, status: 'active' } : e));
+                                    alert('Exam launched! OTP notifications sent to students.');
+                                  } else {
+                                    const data = await res.json();
+                                    alert(`Error: ${data.error}`);
+                                  }
+                                }}
+                                className="px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 rounded-lg hover:bg-emerald-500/20 transition-colors border border-emerald-500/20"
+                              >
+                                Launch Exam
+                              </button>
+                            )}
+                            {exam.status === 'draft' && (
+                              <button
+                                onClick={() => handlePublish(exam.id)}
+                                className="px-3 py-1.5 text-xs font-medium text-blue-400 bg-blue-500/10 rounded-lg hover:bg-blue-500/20 transition-colors border border-blue-500/20"
+                              >
+                                Publish
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                setSelectedEditExam({
+                                  id: exam.id,
+                                  title: exam.title,
+                                  description: exam.description,
+                                  scheduled_at: exam.scheduled_at,
+                                  duration_minutes: exam.duration_minutes,
+                                  available_until: exam.available_until,
+                                  status: exam.status,
+                                  exam_type: exam.exam_type,
+                                });
+                                setIsEditModalOpen(true);
+                              }}
+                              className="p-2 text-zinc-400 hover:text-blue-400 rounded-lg hover:bg-blue-500/10 transition-colors"
+                              title="Edit"
+                            >
+                              <HiPencilSquare className="w-4 h-4" />
+                            </button>
+                            {(exam.status === 'active' || exam.status === 'completed') && (
+                              <button
+                                onClick={() => {
+                                  setSelectedOtpExam({ id: exam.id, title: exam.title });
+                                  setIsOtpModalOpen(true);
+                                }}
+                                className="p-2 text-zinc-400 hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10 transition-colors"
+                                title="View OTPs"
+                              >
+                                <HiKey className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors" title="View">
+                              <HiEye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(exam.id)}
+                              className="p-2 text-zinc-400 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors"
+                              title="Delete"
+                            >
+                              <HiTrash className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards (hidden on desktop) */}
+            <div className="md:hidden divide-y divide-zinc-800/50">
               {filteredExams.map(exam => {
                 const style = STATUS_STYLES[exam.status] || STATUS_STYLES.draft;
                 return (
-                  <tr key={exam.id} className="hover:bg-zinc-800/20 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-rose-500/10 rounded-lg">
+                  <div key={exam.id} className="p-4 space-y-3">
+                    {/* Title row */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2 bg-rose-500/10 rounded-lg shrink-0">
                           <HiClipboardDocumentList className="w-4 h-4 text-rose-400" />
                         </div>
-                        <div>
-                          <p className="font-medium">{exam.title}</p>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{exam.title}</p>
                           <p className="text-xs text-zinc-500">{exam.exam_type}</p>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${style.bg} ${style.text}`}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border shrink-0 ${style.bg} ${style.text}`}>
                         {style.label}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-400">{exam.duration_minutes} min</td>
-                    <td className="px-6 py-4 text-zinc-400 text-xs">
-                      {new Date(exam.scheduled_at).toLocaleDateString()}{' '}
-                      <span className="font-semibold text-zinc-300">
-                        {formatTo12Hour(exam.scheduled_at)}
+                    </div>
+
+                    {/* Info row */}
+                    <div className="flex items-center gap-4 text-xs text-zinc-400">
+                      <span>{exam.duration_minutes} min</span>
+                      <span>
+                        {new Date(exam.scheduled_at).toLocaleDateString()}{' '}
+                        <span className="font-semibold text-zinc-300">{formatTo12Hour(exam.scheduled_at)}</span>
                       </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-1">
-                        {exam.status !== 'completed' && exam.status !== 'archived' && exam.status !== 'active' && (
-                          <button
-                            onClick={async () => {
-                              const res = await fetch(`/api/exams/${exam.id}/launch`, { method: 'POST' });
-                              if (res.ok) {
-                                setExams(exams.map(e => e.id === exam.id ? { ...e, status: 'active' } : e));
-                                alert('Exam launched! OTP notifications sent to students.');
-                              } else {
-                                const data = await res.json();
-                                alert(`Error: ${data.error}`);
-                              }
-                            }}
-                            className="px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 rounded-lg hover:bg-emerald-500/20 transition-colors border border-emerald-500/20"
-                          >
-                            Launch Exam
-                          </button>
-                        )}
-                        {exam.status === 'draft' && (
-                          <button
-                            onClick={() => handlePublish(exam.id)}
-                            className="px-3 py-1.5 text-xs font-medium text-blue-400 bg-blue-500/10 rounded-lg hover:bg-blue-500/20 transition-colors border border-blue-500/20"
-                          >
-                            Publish
-                          </button>
-                        )}
+                    </div>
+
+                    {/* Actions row */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {exam.status !== 'completed' && exam.status !== 'archived' && exam.status !== 'active' && (
                         <button
-                          onClick={() => {
-                            setSelectedEditExam({
-                              id: exam.id,
-                              title: exam.title,
-                              description: exam.description,
-                              scheduled_at: exam.scheduled_at,
-                              duration_minutes: exam.duration_minutes,
-                              available_until: exam.available_until,
-                              status: exam.status,
-                              exam_type: exam.exam_type,
-                            });
-                            setIsEditModalOpen(true);
+                          onClick={async () => {
+                            const res = await fetch(`/api/exams/${exam.id}/launch`, { method: 'POST' });
+                            if (res.ok) {
+                              setExams(exams.map(e => e.id === exam.id ? { ...e, status: 'active' } : e));
+                              alert('Exam launched!');
+                            } else {
+                              const data = await res.json();
+                              alert(`Error: ${data.error}`);
+                            }
                           }}
-                          className="p-2 text-zinc-400 hover:text-blue-400 rounded-lg hover:bg-blue-500/10 transition-colors"
-                          title="Edit"
+                          className="px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 rounded-lg border border-emerald-500/20"
                         >
-                          <HiPencilSquare className="w-4 h-4" />
+                          Launch
                         </button>
-                        {(exam.status === 'active' || exam.status === 'completed') && (
-                          <button
-                            onClick={() => {
-                              setSelectedOtpExam({ id: exam.id, title: exam.title });
-                              setIsOtpModalOpen(true);
-                            }}
-                            className="p-2 text-zinc-400 hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10 transition-colors"
-                            title="View OTPs"
-                          >
-                            <HiKey className="w-4 h-4" />
-                          </button>
-                        )}
-                        <button className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors" title="View">
-                          <HiEye className="w-4 h-4" />
-                        </button>
+                      )}
+                      {exam.status === 'draft' && (
                         <button
-                          onClick={() => handleDelete(exam.id)}
-                          className="p-2 text-zinc-400 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors"
-                          title="Delete"
+                          onClick={() => handlePublish(exam.id)}
+                          className="px-3 py-1.5 text-xs font-medium text-blue-400 bg-blue-500/10 rounded-lg border border-blue-500/20"
                         >
-                          <HiTrash className="w-4 h-4" />
+                          Publish
                         </button>
-                      </div>
-                    </td>
-                  </tr>
+                      )}
+                      <button
+                        onClick={() => {
+                          setSelectedEditExam({
+                            id: exam.id, title: exam.title, description: exam.description,
+                            scheduled_at: exam.scheduled_at, duration_minutes: exam.duration_minutes,
+                            available_until: exam.available_until, status: exam.status, exam_type: exam.exam_type,
+                          });
+                          setIsEditModalOpen(true);
+                        }}
+                        className="p-2 text-zinc-400 hover:text-blue-400 rounded-lg hover:bg-blue-500/10 transition-colors"
+                        title="Edit"
+                      >
+                        <HiPencilSquare className="w-4 h-4" />
+                      </button>
+                      {(exam.status === 'active' || exam.status === 'completed') && (
+                        <button
+                          onClick={() => { setSelectedOtpExam({ id: exam.id, title: exam.title }); setIsOtpModalOpen(true); }}
+                          className="p-2 text-zinc-400 hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10 transition-colors"
+                          title="OTPs"
+                        >
+                          <HiKey className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDelete(exam.id)}
+                        className="p-2 text-zinc-400 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors ml-auto"
+                        title="Delete"
+                      >
+                        <HiTrash className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
       </div>
 

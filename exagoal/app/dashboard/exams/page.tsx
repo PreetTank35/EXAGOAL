@@ -143,9 +143,9 @@ export default function ExamsPage() {
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-6 sm:mb-8">
         <div>
-          <h1 className="text-2xl font-bold">Examinations</h1>
+          <h1 className="text-xl sm:text-2xl font-bold">Examinations</h1>
           <p className="text-zinc-400 text-sm mt-1">
             Your published exams appear here automatically
           </p>
@@ -154,7 +154,7 @@ export default function ExamsPage() {
 
       {/* Search */}
       <div className="mb-6">
-        <div className="relative max-w-md">
+        <div className="relative w-full sm:max-w-md">
           <HiMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
             id="exam-search"
@@ -232,12 +232,12 @@ export default function ExamsPage() {
 function ExamCard({ exam, idx }: { exam: Exam; idx: number }) {
   return (
     <motion.div
-      className="glass-card glass-card-hover p-6"
+      className="glass-card glass-card-hover p-4 sm:p-6"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: idx * 0.08 }}
     >
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
         <span
           className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
           style={{
