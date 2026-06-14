@@ -2,10 +2,12 @@ import { NextResponse } from 'next/server';
 
 export const maxDuration = 60;
 
-// Strip markdown code fences and extract the first valid JSON object
 function extractJSON(raw: string): string {
+  // Remove reasoning blocks (common in models like DeepSeek-R1 or Nemotron Reasoning)
+  let cleaned = raw.replace(/<think>[\s\S]*?<\/think>/gi, '');
+
   // Remove markdown code blocks (```json ... ``` or ``` ... ```)
-  let cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  cleaned = cleaned.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
   // Find the outermost JSON object
   const firstBrace = cleaned.indexOf('{');
