@@ -125,9 +125,50 @@ export default function LoginPage() {
         {/* Card */}
         <div className="glass-card p-8">
           <h1 className="text-2xl font-bold text-center mb-2">Welcome Back</h1>
-          <p className="text-sm text-zinc-400 text-center mb-8">
+          <p className="text-sm text-zinc-400 text-center mb-4">
             Sign in to access your dashboard
           </p>
+
+          {/* Auth Disabled Notice & Direct Access Buttons */}
+          <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-sm space-y-3">
+            <div className="flex items-center gap-2 font-medium">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              <span>Authentication is currently disabled</span>
+            </div>
+            <p className="text-xs text-amber-200/80">
+              You can directly jump into either dashboard without signing in:
+            </p>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={async () => {
+                  await fetch('/api/auth/set-role', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role: 'student' }),
+                  });
+                  router.push('/dashboard');
+                }}
+                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+              >
+                <HiAcademicCap className="w-4 h-4" /> Student Portal
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await fetch('/api/auth/set-role', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role: 'instructor' }),
+                  });
+                  router.push('/dashboard/teacher');
+                }}
+                className="px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+              >
+                <HiBuildingLibrary className="w-4 h-4" /> Teacher Portal
+              </button>
+            </div>
+          </div>
 
           {/* Role Toggle */}
           <div className="flex bg-zinc-800/50 rounded-xl p-1 mb-4 border border-zinc-700/50">

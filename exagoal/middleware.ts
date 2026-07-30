@@ -13,51 +13,12 @@ export async function middleware(request: NextRequest) {
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('X-DNS-Prefetch-Control', 'on');
 
-  // Role-Based Routing Protection (HMAC-Verified Edge Check)
+  // Authentication and Role Protection disabled for demo/testing mode
+  /*
   if (pathname.startsWith('/dashboard/teacher')) {
-    const cookieValue = request.cookies.get('exagoal_role')?.value;
-
-    if (!cookieValue || !cookieValue.includes('.')) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-
-    const [role, signature] = cookieValue.split('.');
-    
-    if (role !== 'instructor') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-
-    // Verify the HMAC signature to prevent cookie tampering
-    const salt = process.env.OTP_SECRET_SALT || 'exagoal_otp_salt_change_in_production';
-    const encoder = new TextEncoder();
-
-    try {
-      const key = await crypto.subtle.importKey(
-        'raw',
-        encoder.encode(salt),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-      );
-
-      const expectedSig = await crypto.subtle.sign(
-        'HMAC',
-        key,
-        encoder.encode(role)
-      );
-
-      const expectedHex = Array.from(new Uint8Array(expectedSig))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-
-      if (signature !== expectedHex) {
-        // Cookie was tampered with — redirect to student dashboard
-        return NextResponse.redirect(new URL('/dashboard', request.url));
-      }
-    } catch {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
+    ...
   }
+  */
 
   // Extra security for exam routes
   if (pathname.startsWith('/exam')) {

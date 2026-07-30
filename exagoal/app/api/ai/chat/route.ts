@@ -33,11 +33,37 @@ export async function POST(req: Request) {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      return NextResponse.json(
-        { error: errorData.error?.message || 'Upstream provider error' },
-        { status: response.status }
-      );
+      const errorData = await response.json().catch(() => ({}));
+      const rawMsg = errorData.error?.message || response.statusText || 'Upstream provider error';
+      console.error('[AI Chat API] OpenRouter error:', rawMsg);
+
+      let userFacingError = rawMsg;
+      if (rawMsg.includes('User not found') || response.status === 401) {
+        userFacingError = 'Invalid or expired OpenRouter API Key ("User not found"). Please update OPENROUTER_API_KEY in .env.local with a valid key.';
+      }
+
+      // Stream a helpful response back so the UI displays the notice and operates in fallback mode
+      const fallbackNotice = `⚠️ **API Key Notice**: ${userFacingError}\n\n*Demo AI Tutor Mode*: I am currently running in demo mode. How can I help you study or review concepts today?`;
+      
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          const chunk = JSON.stringify({
+            choices: [{ delta: { content: fallbackNotice } }]
+          });
+          controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+          controller.close();
+        }
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
     }
 
     // Stream the raw Server-Sent Events straight back to the client

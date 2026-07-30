@@ -1,6 +1,6 @@
 -- ============================================================
 -- ExaGoal — Database Schema Migration 007
--- Add ON DELETE CASCADE to exam_sessions
+-- Addg ON DELETE CASCADE to exam_sessions
 -- Run this in your Supabase SQL Editor
 -- ============================================================
 
