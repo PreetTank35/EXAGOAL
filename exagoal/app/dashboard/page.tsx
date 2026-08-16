@@ -16,37 +16,12 @@ import {
   HiChartBar,
 } from 'react-icons/hi2';
 
-// Demo data for MVP
-const STATS = [
-  {
-    label: 'Total Exams',
-    value: '12',
-    change: '+3 this month',
-    icon: HiClipboardDocumentList,
-    color: '#6366f1',
-  },
-  {
-    label: 'Avg. Score',
-    value: '78.5%',
-    change: '+2.3% improvement',
-    icon: HiArrowTrendingUp,
-    color: '#22c55e',
-  },
-  {
-    label: 'Credentials',
-    value: '8',
-    change: 'All verified on-chain',
-    icon: HiShieldCheck,
-    color: '#8b5cf6',
-  },
-  {
-    label: 'AI Insights',
-    value: '24',
-    change: 'Personalized tips',
-    icon: HiCpuChip,
-    color: '#06b6d4',
-  },
-];
+interface DashboardStats {
+  totalExams: number;
+  avgScore: string;
+  credentials: number;
+  aiInsights: number;
+}
 
 function getExamTypeColor(type: string) {
   const colors: Record<string, string> = {
@@ -72,24 +47,87 @@ function getExamTypeLabel(type: string) {
 
 export default function DashboardPage() {
   const [upcomingExams, setUpcomingExams] = useState<any[]>([]);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalExams: 0,
+    avgScore: '—',
+    credentials: 0,
+    aiInsights: 0,
+  });
+  const [userName, setUserName] = useState('Student');
   const supabase = createClient();
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Fetch user name from profile
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+        if (profile?.full_name) setUserName(profile.full_name);
+      }
+
+      // Fetch upcoming exams
+      const { data: examsData } = await supabase
         .from('exams')
         .select('id, title, exam_type, scheduled_at, duration_minutes, status, available_until')
         .in('status', ['draft', 'published', 'active'])
         .gte('scheduled_at', new Date().toISOString())
         .order('scheduled_at', { ascending: true })
         .limit(5);
-      if (data) setUpcomingExams(data);
+      if (examsData) setUpcomingExams(examsData);
+
+      // Fetch real stats for the logged-in student
+      if (user) {
+        // Total exams taken
+        const { count: examCount } = await supabase
+          .from('exam_sessions')
+          .select('*', { count: 'exact', head: true })
+          .eq('student_id', user.id);
+
+        // Average score (from graded/submitted sessions)
+        const { data: scoredSessions } = await supabase
+          .from('exam_sessions')
+          .select('total_score')
+          .eq('student_id', user.id)
+          .in('status', ['submitted', 'graded'])
+          .not('total_score', 'is', null);
+
+        let avgScoreStr = '—';
+        if (scoredSessions && scoredSessions.length > 0) {
+          const avg = scoredSessions.reduce((sum: number, s: { total_score: number | null }) => sum + (s.total_score || 0), 0) / scoredSessions.length;
+          avgScoreStr = `${avg.toFixed(1)}%`;
+        }
+
+        // Credentials count
+        const { count: credCount } = await supabase
+          .from('credentials')
+          .select('*', { count: 'exact', head: true })
+          .eq('student_id', user.id);
+
+        // AI feedback count (unique answers with AI feedback)
+        const { count: feedbackCount } = await supabase
+          .from('answers')
+          .select('*', { count: 'exact', head: true })
+          .not('ai_feedback', 'is', null);
+
+        setStats({
+          totalExams: examCount || 0,
+          avgScore: avgScoreStr,
+          credentials: credCount || 0,
+          aiInsights: feedbackCount || 0,
+        });
+      }
     }
     load();
 
     // Real-time subscription
+    const channelName = `dashboard-exams-${Math.random().toString(36).substring(2, 9)}`;
     const channel = supabase
-      .channel('dashboard-exams')
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'exams' }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -104,7 +142,7 @@ export default function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
         >
-          Welcome back, <span className="gradient-text">Student</span>
+          Welcome back, <span className="gradient-text">{userName}</span>
         </motion.h1>
         <p className="text-zinc-400 mt-1">
           Here&apos;s your assessment overview for today.
@@ -113,7 +151,12 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-        {STATS.map((stat, idx) => (
+        {[
+          { label: 'Total Exams', value: String(stats.totalExams), change: 'Exams taken', icon: HiClipboardDocumentList, color: '#6366f1' },
+          { label: 'Avg. Score', value: stats.avgScore, change: 'Across all exams', icon: HiArrowTrendingUp, color: '#22c55e' },
+          { label: 'Credentials', value: String(stats.credentials), change: 'Verified certificates', icon: HiShieldCheck, color: '#8b5cf6' },
+          { label: 'AI Insights', value: String(stats.aiInsights), change: 'Personalized feedback', icon: HiCpuChip, color: '#06b6d4' },
+        ].map((stat, idx) => (
           <motion.div
             key={stat.label}
             className="glass-card p-5"

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   HiAcademicCap,
@@ -10,14 +10,53 @@ import {
   HiArrowRight,
   HiClock,
 } from 'react-icons/hi2';
+import { createClient } from '@/lib/supabase/client';
 
 export default function OTPGatePage() {
   const router = useRouter();
+  const params = useParams();
+  const sessionId = params.sessionId as string;
+
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState('');
-  const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
+  const [timeLeft, setTimeLeft] = useState(900); // 15 minutes (matches OTP validity)
+  const [examTitle, setExamTitle] = useState('');
+  const [examId, setExamId] = useState('');
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const supabase = createClient();
+
+  // Load session metadata (exam title, exam_id, OTP expiry)
+  useEffect(() => {
+    async function loadSession() {
+      const { data: session, error: sessionErr } = await supabase
+        .from('exam_sessions')
+        .select('exam_id, otp_expires_at, status, exams(title)')
+        .eq('id', sessionId)
+        .single();
+
+      if (sessionErr || !session) return;
+
+      // @ts-ignore — nested join
+      setExamTitle(session.exams?.title || 'Exam');
+      setExamId(session.exam_id);
+
+      // Calculate remaining time from OTP expiry
+      if (session.otp_expires_at) {
+        const remaining = Math.max(
+          0,
+          Math.floor((new Date(session.otp_expires_at).getTime() - Date.now()) / 1000)
+        );
+        setTimeLeft(remaining);
+      }
+
+      // If session is already active, skip gate
+      if (session.status === 'active') {
+        router.push(`/exam/live/${sessionId}`);
+      }
+    }
+    loadSession();
+  }, [sessionId]);
 
   // Countdown timer
   useEffect(() => {
@@ -35,10 +74,11 @@ export default function OTPGatePage() {
   };
 
   const handleOTPChange = (index: number, value: string) => {
-    if (!/^\d*$/.test(value)) return;
+    // Allow alphanumeric (OTPs are uppercase alphanumeric)
+    if (!/^[A-Za-z0-9]*$/.test(value)) return;
 
     const newOtp = [...otp];
-    newOtp[index] = value.slice(-1);
+    newOtp[index] = value.slice(-1).toUpperCase();
     setOtp(newOtp);
     setError('');
 
@@ -56,7 +96,7 @@ export default function OTPGatePage() {
 
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    const pasted = e.clipboardData.getData('text').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6);
     const newOtp = [...otp];
     pasted.split('').forEach((char, i) => {
       newOtp[i] = char;
@@ -68,20 +108,49 @@ export default function OTPGatePage() {
   const handleVerify = async () => {
     const code = otp.join('');
     if (code.length !== 6) {
-      setError('Please enter the complete 6-digit OTP');
+      setError('Please enter the complete 6-character OTP');
+      return;
+    }
+
+    if (timeLeft <= 0) {
+      setError('OTP has expired. Contact your instructor for a new one.');
       return;
     }
 
     setVerifying(true);
     setError('');
 
-    // MVP: Simulate OTP verification
-    // In production: POST /api/sessions/{sessionId}/otp/verify
-    setTimeout(() => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setError('You must be logged in to access this exam.');
+        setVerifying(false);
+        return;
+      }
+
+      const res = await fetch(`/api/exams/${examId}/access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          otp_code: code,
+          student_id: user.id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Verification failed.');
+        setVerifying(false);
+        return;
+      }
+
+      // Verification successful — navigate to live exam
+      router.push(`/exam/live/${sessionId}`);
+    } catch (err) {
+      setError('Network error. Please try again.');
       setVerifying(false);
-      // Simulate success — navigate to live exam
-      router.push('/exam/live/demo-session');
-    }, 1500);
+    }
   };
 
   return (
@@ -122,8 +191,11 @@ export default function OTPGatePage() {
           </div>
 
           <h1 className="text-2xl font-bold mb-2">Enter Your OTP</h1>
+          {examTitle && (
+            <p className="text-sm text-indigo-400 font-medium mb-1">{examTitle}</p>
+          )}
           <p className="text-sm text-zinc-400 mb-2">
-            A 6-digit one-time password was sent to your registered email
+            Enter the 6-character access code from your notification
           </p>
 
           {/* Timer */}
@@ -153,7 +225,7 @@ export default function OTPGatePage() {
                 key={idx}
                 ref={(el) => { inputRefs.current[idx] = el; }}
                 type="text"
-                inputMode="numeric"
+                inputMode="text"
                 maxLength={1}
                 value={digit}
                 onChange={(e) => handleOTPChange(idx, e.target.value)}
@@ -185,7 +257,7 @@ export default function OTPGatePage() {
           </button>
 
           <p className="text-xs text-zinc-500 mt-4">
-            OTP is unique to your session and expires in 10 minutes.
+            OTP is unique to your session and expires in 15 minutes.
             <br />
             Contact your instructor if you didn&apos;t receive it.
           </p>

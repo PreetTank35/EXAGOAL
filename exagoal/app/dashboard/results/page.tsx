@@ -1,108 +1,41 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import Link from 'next/link';
 import {
   HiCheckCircle,
-  HiXCircle,
   HiClock,
   HiSparkles,
   HiLightBulb,
-  HiArrowRight,
   HiChartBar,
 } from 'react-icons/hi2';
+import { createClient } from '@/lib/supabase/client';
 
-const DEMO_RESULTS = [
-  {
-    id: 'session-1',
-    exam_title: 'Advanced Mathematics — Calculus II',
-    exam_type: 'knowledge',
-    completed_at: '2026-06-10T12:45:00Z',
-    total_score: 85,
-    max_score: 100,
-    grade: 'A',
-    chi_contribution: 85,
-    toku_contribution: 0,
-    tai_contribution: 0,
-    integrity_score: 98,
-    time_taken: '78 min',
-    questions_answered: 25,
-    total_questions: 25,
-    ai_feedback: {
-      strengths: [
-        'Excellent integration technique mastery',
-        'Strong understanding of series convergence tests',
-        'Clear and well-structured solutions',
-      ],
-      concept_gaps: [
-        { concept: 'Multivariable Chain Rule', severity: 'medium' as const },
-        { concept: 'Polar Coordinate Integration', severity: 'low' as const },
-      ],
-      study_plan:
-        'Focus on multivariable calculus for the next 2 weeks. Practice polar coordinate problems from Chapter 12.',
-      encouragement:
-        "Outstanding performance! Your consistent effort in calculus is clearly paying off. Keep pushing your boundaries — you're ready for more advanced challenges.",
-    },
-  },
-  {
-    id: 'session-2',
-    exam_title: 'Ethical Reasoning — Case Studies',
-    exam_type: 'ethical',
-    completed_at: '2026-06-08T15:30:00Z',
-    total_score: 78,
-    max_score: 100,
-    grade: 'B+',
-    chi_contribution: 0,
-    toku_contribution: 78,
-    tai_contribution: 0,
-    integrity_score: 100,
-    time_taken: '52 min',
-    questions_answered: 10,
-    total_questions: 10,
-    ai_feedback: {
-      strengths: [
-        'Thoughtful consideration of multiple stakeholders',
-        'Good identification of ethical frameworks',
-      ],
-      concept_gaps: [
-        { concept: 'Utilitarian vs. Deontological Analysis', severity: 'medium' as const },
-      ],
-      study_plan:
-        'Review ethical frameworks comparison. Practice applying different frameworks to the same scenario.',
-      encouragement:
-        'Your ethical reasoning is developing well. The ability to see multiple perspectives is a valuable strength.',
-    },
-  },
-  {
-    id: 'session-3',
-    exam_title: 'Wellness Self-Assessment',
-    exam_type: 'wellness_check',
-    completed_at: '2026-06-05T09:00:00Z',
-    total_score: 71,
-    max_score: 100,
-    grade: 'B',
-    chi_contribution: 0,
-    toku_contribution: 0,
-    tai_contribution: 71,
-    integrity_score: 100,
-    time_taken: '12 min',
-    questions_answered: 12,
-    total_questions: 12,
-    ai_feedback: {
-      strengths: [
-        'Honest self-reflection',
-        'Awareness of stress triggers',
-      ],
-      concept_gaps: [
-        { concept: 'Work-Life Balance', severity: 'high' as const },
-      ],
-      study_plan:
-        'Incorporate 15-minute mindfulness breaks between study sessions. Consider joining a study group for social support.',
-      encouragement:
-        'Self-awareness is the first step to growth. Remember: rest is part of learning, not the opposite of it.',
-    },
-  },
-];
+interface ConceptGap {
+  concept: string;
+  severity: 'high' | 'medium' | 'low';
+}
+
+interface AIFeedback {
+  strengths: string[];
+  concept_gaps: ConceptGap[];
+  study_plan: string;
+  encouragement: string;
+}
+
+interface ExamResult {
+  id: string;
+  exam_title: string;
+  exam_type: string;
+  completed_at: string;
+  total_score: number;
+  max_score: number;
+  grade: string;
+  time_taken: string;
+  questions_answered: number;
+  total_questions: number;
+  ai_feedback: AIFeedback;
+}
 
 function getExamTypeColor(type: string) {
   const colors: Record<string, string> = {
@@ -117,29 +50,203 @@ function getExamTypeColor(type: string) {
 
 function getSeverityColor(severity: string) {
   switch (severity) {
-    case 'high':
-      return '#ef4444';
-    case 'medium':
-      return '#f59e0b';
-    case 'low':
-      return '#22c55e';
-    default:
-      return '#71717a';
+    case 'high': return '#ef4444';
+    case 'medium': return '#f59e0b';
+    case 'low': return '#22c55e';
+    default: return '#71717a';
   }
 }
 
+function computeGrade(pct: number): string {
+  if (pct >= 90) return 'A+';
+  if (pct >= 85) return 'A';
+  if (pct >= 80) return 'A-';
+  if (pct >= 75) return 'B+';
+  if (pct >= 70) return 'B';
+  if (pct >= 65) return 'B-';
+  if (pct >= 60) return 'C+';
+  if (pct >= 55) return 'C';
+  if (pct >= 50) return 'D';
+  return 'F';
+}
+
 export default function ResultsPage() {
+  const [results, setResults] = useState<ExamResult[]>([]);
+  const [loading, setLoading] = useState(true);
+  const supabase = createClient();
+
+  useEffect(() => {
+    async function loadResults() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Fetch completed exam sessions for this student
+        const { data: sessions, error: sessionsErr } = await supabase
+          .from('exam_sessions')
+          .select(`
+            id,
+            exam_id,
+            total_score,
+            started_at,
+            submitted_at,
+            status,
+            exams(title, exam_type, duration_minutes)
+          `)
+          .eq('student_id', user.id)
+          .in('status', ['submitted', 'graded'])
+          .order('submitted_at', { ascending: false });
+
+        if (sessionsErr || !sessions) {
+          console.error('Error loading results:', sessionsErr);
+          return;
+        }
+
+        // For each session, fetch question and answer details
+        const resultsData: ExamResult[] = [];
+
+        for (const session of sessions) {
+          // Fetch questions for this exam
+          const { data: questions } = await supabase
+            .from('questions')
+            .select('id, max_marks')
+            .eq('exam_id', session.exam_id);
+
+          const totalQuestions = questions?.length || 0;
+          const maxScore = questions?.reduce((sum: number, q: { max_marks: number }) => sum + (q.max_marks || 0), 0) || 100;
+
+          // Fetch answers for this session
+          const { data: answers } = await supabase
+            .from('answers')
+            .select('id, score, ai_feedback')
+            .eq('session_id', session.id);
+
+          const questionsAnswered = answers?.length || 0;
+          const totalScore = session.total_score || 
+            (answers?.reduce((sum: number, a: { score: number | null }) => sum + (a.score || 0), 0) || 0);
+
+          // Calculate time taken
+          let timeTaken = '—';
+          if (session.started_at && session.submitted_at) {
+            const diffMs = new Date(session.submitted_at).getTime() - new Date(session.started_at).getTime();
+            const mins = Math.floor(diffMs / 60000);
+            timeTaken = `${mins} min`;
+          }
+
+          // Aggregate AI feedback from individual answers
+          const strengths: string[] = [];
+          const conceptGaps: ConceptGap[] = [];
+          let studyPlan = '';
+          let encouragement = '';
+
+          if (answers && answers.length > 0) {
+            const feedbackTexts = answers
+              .filter((a: { ai_feedback: string | null }) => !!a.ai_feedback)
+              .map((a: { ai_feedback: string | null }) => a.ai_feedback as string);
+
+            if (feedbackTexts.length > 0) {
+              // Extract key patterns from feedback
+              const correctCount = feedbackTexts.filter((f: string) => f.toLowerCase().includes('correct')).length;
+              if (correctCount > feedbackTexts.length * 0.7) {
+                strengths.push('Strong overall accuracy');
+              }
+              if (correctCount > 0) {
+                strengths.push(`${correctCount} of ${feedbackTexts.length} answers graded positively`);
+              }
+
+              const incorrectFeedback = feedbackTexts.filter((f: string) => 
+                f.toLowerCase().includes('incorrect') || f.toLowerCase().includes('wrong')
+              );
+              if (incorrectFeedback.length > 0) {
+                conceptGaps.push({
+                  concept: `${incorrectFeedback.length} question(s) need review`,
+                  severity: incorrectFeedback.length > totalQuestions * 0.3 ? 'high' : 'medium',
+                });
+              }
+            }
+          }
+
+          // Generate default feedback if none available
+          const pct = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+          if (strengths.length === 0) {
+            if (pct >= 80) strengths.push('Excellent performance overall');
+            else if (pct >= 60) strengths.push('Good understanding of core concepts');
+            else strengths.push('Attempted the exam — keep practicing');
+          }
+
+          if (pct >= 90) {
+            encouragement = 'Outstanding work! Your preparation clearly shows. Keep pushing for excellence.';
+            studyPlan = 'Review any remaining gaps and explore advanced topics in this area.';
+          } else if (pct >= 70) {
+            encouragement = 'Good performance! Focus on the areas highlighted for improvement.';
+            studyPlan = 'Revisit the concepts you found challenging and practice similar problems.';
+          } else if (pct >= 50) {
+            encouragement = 'You\'re making progress! Consistent practice will improve your scores.';
+            studyPlan = 'Review the fundamentals of each topic. Consider working through practice problems.';
+          } else {
+            encouragement = 'Don\'t give up — every attempt is a step forward. Focus on understanding the basics.';
+            studyPlan = 'Start with the core concepts and build up gradually. Reach out to your instructor for help.';
+          }
+
+          // @ts-ignore — nested join
+          const examTitle = session.exams?.title || 'Exam';
+          // @ts-ignore
+          const examType = session.exams?.exam_type || 'knowledge';
+
+          resultsData.push({
+            id: session.id,
+            exam_title: examTitle,
+            exam_type: examType,
+            completed_at: session.submitted_at || session.started_at || new Date().toISOString(),
+            total_score: totalScore,
+            max_score: maxScore,
+            grade: computeGrade(pct),
+            time_taken: timeTaken,
+            questions_answered: questionsAnswered,
+            total_questions: totalQuestions,
+            ai_feedback: {
+              strengths,
+              concept_gaps: conceptGaps,
+              study_plan: studyPlan,
+              encouragement,
+            },
+          });
+        }
+
+        setResults(resultsData);
+      } catch (err) {
+        console.error('Error loading results:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadResults();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        <div className="glass-card p-12 text-center">
+          <div className="w-8 h-8 border-2 border-zinc-600 border-t-indigo-500 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-zinc-400">Loading your results...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Exam Results</h1>
         <p className="text-zinc-400 text-sm mt-1">
-          AI-generated feedback and detailed performance analysis
+          {results.length > 0
+            ? 'AI-generated feedback and detailed performance analysis'
+            : 'No completed exams yet. Your results will appear here after you submit an exam.'}
         </p>
       </div>
 
       <div className="space-y-6">
-        {DEMO_RESULTS.map((result, idx) => (
+        {results.map((result, idx) => (
           <motion.div
             key={result.id}
             className="glass-card overflow-hidden"
@@ -189,9 +296,9 @@ export default function ResultsPage() {
                   </div>
                   <div
                     className={`text-lg font-bold px-3 py-1 rounded-lg ${
-                      result.total_score >= 85
+                      result.total_score / result.max_score >= 0.85
                         ? 'bg-green-500/10 text-green-400'
-                        : result.total_score >= 70
+                        : result.total_score / result.max_score >= 0.7
                         ? 'bg-yellow-500/10 text-yellow-400'
                         : 'bg-red-500/10 text-red-400'
                     }`}
@@ -220,10 +327,7 @@ export default function ResultsPage() {
                   </h5>
                   <ul className="space-y-1.5">
                     {result.ai_feedback.strengths.map((s) => (
-                      <li
-                        key={s}
-                        className="text-xs text-zinc-300 flex items-start gap-2"
-                      >
+                      <li key={s} className="text-xs text-zinc-300 flex items-start gap-2">
                         <span className="w-1 h-1 rounded-full bg-green-400 mt-1.5 shrink-0" />
                         {s}
                       </li>
@@ -237,29 +341,30 @@ export default function ResultsPage() {
                     <HiLightBulb className="w-3.5 h-3.5" />
                     Areas for Growth
                   </h5>
-                  <ul className="space-y-1.5">
-                    {result.ai_feedback.concept_gaps.map((gap) => (
-                      <li
-                        key={gap.concept}
-                        className="text-xs text-zinc-300 flex items-center gap-2"
-                      >
-                        <span
-                          className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{ background: getSeverityColor(gap.severity) }}
-                        />
-                        {gap.concept}
-                        <span
-                          className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                          style={{
-                            background: `${getSeverityColor(gap.severity)}15`,
-                            color: getSeverityColor(gap.severity),
-                          }}
-                        >
-                          {gap.severity}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  {result.ai_feedback.concept_gaps.length > 0 ? (
+                    <ul className="space-y-1.5">
+                      {result.ai_feedback.concept_gaps.map((gap) => (
+                        <li key={gap.concept} className="text-xs text-zinc-300 flex items-center gap-2">
+                          <span
+                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{ background: getSeverityColor(gap.severity) }}
+                          />
+                          {gap.concept}
+                          <span
+                            className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                            style={{
+                              background: `${getSeverityColor(gap.severity)}15`,
+                              color: getSeverityColor(gap.severity),
+                            }}
+                          >
+                            {gap.severity}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-zinc-400">No major gaps identified — great work!</p>
+                  )}
                 </div>
               </div>
 

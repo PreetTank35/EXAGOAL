@@ -95,8 +95,9 @@ export default function ExamsPage() {
     loadExams();
 
     // Subscribe to real-time changes on exams table (all relevant statuses)
+    const channelName = `student-exams-${Math.random().toString(36).substring(2, 9)}`;
     const channel = supabase
-      .channel('student-exams')
+      .channel(channelName)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',

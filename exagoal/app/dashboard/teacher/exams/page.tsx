@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { HiClipboardDocumentList, HiSparkles, HiPencilSquare, HiTrash, HiEye, HiDocumentDuplicate, HiKey } from 'react-icons/hi2';
+import { HiClipboardDocumentList, HiSparkles, HiPencilSquare, HiTrash, HiEye, HiDocumentDuplicate, HiKey, HiUserPlus } from 'react-icons/hi2';
 import { createClient } from '@/lib/supabase/client';
 import { formatTo12Hour } from '@/lib/utils/timeFormat';
 import TeacherOtpModal from '@/components/exams/TeacherOtpModal';
 import TeacherEditExamModal, { ExamEditData } from '@/components/exams/TeacherEditExamModal';
+import EnrollmentModal from '@/components/exams/EnrollmentModal';
 interface Exam {
   id: string;
   title: string;
@@ -38,6 +39,10 @@ export default function TeacherExamsPage() {
   // Edit Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedEditExam, setSelectedEditExam] = useState<ExamEditData | null>(null);
+
+  // Enrollment Modal State
+  const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
+  const [selectedEnrollExam, setSelectedEnrollExam] = useState<{ id: string, title: string } | null>(null);
 
   const supabase = createClient();
 
@@ -195,6 +200,16 @@ export default function TeacherExamsPage() {
                             )}
                             <button
                               onClick={() => {
+                                setSelectedEnrollExam({ id: exam.id, title: exam.title });
+                                setIsEnrollModalOpen(true);
+                              }}
+                              className="p-2 text-zinc-400 hover:text-blue-400 rounded-lg hover:bg-blue-500/10 transition-colors"
+                              title="Enroll Students"
+                            >
+                              <HiUserPlus className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
                                 setSelectedEditExam({
                                   id: exam.id,
                                   title: exam.title,
@@ -303,6 +318,16 @@ export default function TeacherExamsPage() {
                       )}
                       <button
                         onClick={() => {
+                          setSelectedEnrollExam({ id: exam.id, title: exam.title });
+                          setIsEnrollModalOpen(true);
+                        }}
+                        className="p-2 text-zinc-400 hover:text-blue-400 rounded-lg hover:bg-blue-500/10 transition-colors"
+                        title="Enroll Students"
+                      >
+                        <HiUserPlus className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => {
                           setSelectedEditExam({
                             id: exam.id, title: exam.title, description: exam.description,
                             scheduled_at: exam.scheduled_at, duration_minutes: exam.duration_minutes,
@@ -354,6 +379,13 @@ export default function TeacherExamsPage() {
         onSave={(updated) => {
           setExams(exams.map(e => e.id === updated.id ? { ...e, ...updated } : e));
         }}
+      />
+
+      <EnrollmentModal
+        isOpen={isEnrollModalOpen}
+        onClose={() => setIsEnrollModalOpen(false)}
+        examId={selectedEnrollExam?.id || ''}
+        examTitle={selectedEnrollExam?.title || ''}
       />
     </div>
   );

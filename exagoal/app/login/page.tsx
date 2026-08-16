@@ -49,14 +49,16 @@ export default function LoginPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Authentication failed');
 
-      // 1. Verify actual role in the Database (Truth Check)
-      const { data: teacherRecord } = await supabase
-        .from('teachers')
-        .select('id')
+      // 1. Verify actual role in the Database (Truth Check - Unified Profiles)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
         .eq('id', user.id)
         .single();
 
-      const isActuallyInstructor = !!teacherRecord;
+      const isActuallyInstructor = 
+        profile?.role === 'instructor' || 
+        (user.email && user.email.endsWith('@exagoal.in'));
 
       // 2. Set HMAC-Signed Secure Cookie via server, then route correctly
       const actualRole = isActuallyInstructor ? 'instructor' : 'student';
@@ -75,7 +77,11 @@ export default function LoginPage() {
       router.refresh(); // Refresh to ensure middleware catches the new session cookie
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message || 'Failed to sign in. Please check your credentials.');
+        if (err.message.includes('Failed to fetch') || err.name === 'TypeError') {
+          setError('Unable to connect to Supabase. Please verify your NEXT_PUBLIC_SUPABASE_URL and network connection in .env.local.');
+        } else {
+          setError(err.message || 'Failed to sign in. Please check your credentials.');
+        }
       } else {
         setError(String(err) || 'Failed to sign in. Please check your credentials.');
       }
@@ -129,46 +135,8 @@ export default function LoginPage() {
             Sign in to access your dashboard
           </p>
 
-          {/* Auth Disabled Notice & Direct Access Buttons */}
-          <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-sm space-y-3">
-            <div className="flex items-center gap-2 font-medium">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-              <span>Authentication is currently disabled</span>
-            </div>
-            <p className="text-xs text-amber-200/80">
-              You can directly jump into either dashboard without signing in:
-            </p>
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <button
-                type="button"
-                onClick={async () => {
-                  await fetch('/api/auth/set-role', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ role: 'student' }),
-                  });
-                  router.push('/dashboard');
-                }}
-                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm"
-              >
-                <HiAcademicCap className="w-4 h-4" /> Student Portal
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  await fetch('/api/auth/set-role', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ role: 'instructor' }),
-                  });
-                  router.push('/dashboard/teacher');
-                }}
-                className="px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm"
-              >
-                <HiBuildingLibrary className="w-4 h-4" /> Teacher Portal
-              </button>
-            </div>
-          </div>
+
+
 
           {/* Role Toggle */}
           <div className="flex bg-zinc-800/50 rounded-xl p-1 mb-4 border border-zinc-700/50">

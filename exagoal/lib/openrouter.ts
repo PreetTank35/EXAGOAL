@@ -1,8 +1,6 @@
-// ============================================================
-// OpenRouter API Client — Multi-Model AI Integration
-// ============================================================
+import { generateGeminiContent, getGeminiApiKey } from './gemini';
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+const getApiKey = () => (process.env.OPENROUTER_API_KEY || '').trim().replace(/['"\r\n]/g, '');
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 interface OpenRouterMessage {
@@ -14,48 +12,95 @@ interface OpenRouterOptions {
   temperature?: number;
   max_tokens?: number;
   top_p?: number;
+  responseMimeType?: string;
 }
 
 // Model selection strategy per use-case
 export const AI_MODELS = {
-  SOLUTION_GENERATION: 'anthropic/claude-sonnet-4-20250514',
-  ANSWER_GRADING: 'openai/gpt-4o',
-  FEEDBACK_SYNTHESIS: 'google/gemini-2.5-flash',
-  DIFFICULTY_ADAPT: 'google/gemini-2.5-flash',
-  PLAGIARISM_CHECK: 'anthropic/claude-sonnet-4-20250514',
+  SOLUTION_GENERATION: 'gemini-2.5-flash',
+  ANSWER_GRADING: 'gemini-2.5-flash',
+  FEEDBACK_SYNTHESIS: 'gemini-2.5-flash',
+  DIFFICULTY_ADAPT: 'gemini-2.5-flash',
+  PLAGIARISM_CHECK: 'gemini-2.5-flash',
 } as const;
 
+const FALLBACK_MODELS = [
+  'nvidia/nemotron-3.5-lightning:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'openai/gpt-oss-20b:free',
+  'liquid/lfm-2.5-2.6b:free',
+  'google/gemma-4-31b-it:free',
+];
+
 export async function callOpenRouter(
-  model: string,
+  preferredModel: string,
   messages: OpenRouterMessage[],
   options: OpenRouterOptions = {}
 ): Promise<string> {
-  const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://exagoal.com',
-      'X-Title': 'ExaGoal Examination Platform',
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: options.temperature ?? 0.3,
-      max_tokens: options.max_tokens ?? 2048,
-      top_p: options.top_p ?? 0.9,
-    }),
-  });
+  // 1. Try Google Gemini 2.5 Flash first if GEMINI_API_KEY is available
+  const geminiKey = getGeminiApiKey();
+  if (geminiKey) {
+    try {
+      const systemMessage = messages.find(m => m.role === 'system')?.content;
+      const nonSystemMessages = messages.filter(m => m.role !== 'system');
+      const contents = nonSystemMessages.map(m => ({
+        role: (m.role === 'assistant' ? 'model' : 'user') as 'user' | 'model',
+        parts: [{ text: m.content }],
+      }));
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(
-      `OpenRouter Error: ${(error as Record<string, Record<string, string>>).error?.message || response.statusText}`
-    );
+      const geminiText = await generateGeminiContent(contents, {
+        systemInstruction: systemMessage,
+        temperature: options.temperature,
+        responseMimeType: options.responseMimeType,
+      });
+
+      if (geminiText) return geminiText;
+    } catch (geminiErr) {
+      console.warn('[AI Service] Gemini direct call failed, falling back to OpenRouter:', geminiErr);
+    }
+  }
+  const modelsToTry = [
+    preferredModel,
+    ...FALLBACK_MODELS.filter(m => m !== preferredModel),
+  ];
+
+  let lastError = '';
+
+  for (const model of modelsToTry) {
+    try {
+      const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getApiKey()}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+          'X-Title': 'ExaGoal Examination Platform',
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: options.temperature ?? 0.3,
+          max_tokens: options.max_tokens ?? 2048,
+          top_p: options.top_p ?? 0.9,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (content) return content;
+      }
+
+      const error = await response.json().catch(() => ({}));
+      lastError = (error as Record<string, Record<string, string>>).error?.message || response.statusText;
+      console.warn(`[OpenRouter] ${model} failed: ${lastError}. Trying fallback...`);
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err.message : String(err);
+      console.warn(`[OpenRouter] ${model} error: ${lastError}. Trying fallback...`);
+    }
   }
 
-  const data = await response.json();
-  return data.choices[0].message.content;
+  throw new Error(`OpenRouter Error: All models failed. Last error: ${lastError}`);
 }
 
 /** Generate a model solution + rubric for a given question */

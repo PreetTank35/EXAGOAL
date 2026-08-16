@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyOTP } from '@/lib/otp';
 
 // Initialize Supabase Admin client (bypasses RLS)
 function getSupabaseAdmin() {
@@ -69,8 +70,8 @@ export async function POST(
       return NextResponse.json({ error: 'No exam session found for this student.' }, { status: 404 });
     }
 
-    // Verify OTP matches
-    if (session.otp_code !== otp_code) {
+    // Verify OTP against stored HMAC hash
+    if (!verifyOTP(otp_code, session.otp_code)) {
       return NextResponse.json({ error: 'Invalid OTP. Please check your notification and try again.' }, { status: 401 });
     }
 

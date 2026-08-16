@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HiAcademicCap,
@@ -12,73 +12,20 @@ import {
   HiExclamationTriangle,
   HiCheckCircle,
   HiPaperAirplane,
-  HiLightBulb,
 } from 'react-icons/hi2';
 import { useExamLockdown } from '@/hooks/useExamLockdown';
+import { createClient } from '@/lib/supabase/client';
 
-// Demo exam questions
-const DEMO_QUESTIONS = [
-  {
-    id: '1',
-    question_text:
-      'Evaluate the following integral: ∫(0 to π/2) sin²(x) cos(x) dx',
-    question_type: 'short_answer' as const,
-    max_marks: 10,
-    difficulty_level: 3,
-    bloom_taxonomy: 'apply',
-    options: null,
-  },
-  {
-    id: '2',
-    question_text:
-      'Which of the following series converges?',
-    question_type: 'mcq' as const,
-    max_marks: 5,
-    difficulty_level: 2,
-    bloom_taxonomy: 'analyze',
-    options: [
-      { id: 'a', text: '∑(n=1 to ∞) 1/n', is_correct: false },
-      { id: 'b', text: '∑(n=1 to ∞) 1/n²', is_correct: true },
-      { id: 'c', text: '∑(n=1 to ∞) (-1)ⁿ', is_correct: false },
-      { id: 'd', text: '∑(n=1 to ∞) n/(n+1)', is_correct: false },
-    ],
-  },
-  {
-    id: '3',
-    question_text:
-      'Explain the Fundamental Theorem of Calculus and its two parts. Provide an example illustrating each part.',
-    question_type: 'essay' as const,
-    max_marks: 15,
-    difficulty_level: 4,
-    bloom_taxonomy: 'evaluate',
-    options: null,
-  },
-  {
-    id: '4',
-    question_text:
-      'Calculate the volume of the solid obtained by rotating the region bounded by y = x², y = 0, and x = 2 about the x-axis.',
-    question_type: 'short_answer' as const,
-    max_marks: 10,
-    difficulty_level: 3,
-    bloom_taxonomy: 'apply',
-    options: null,
-  },
-  {
-    id: '5',
-    question_text:
-      'Which substitution is most appropriate for evaluating ∫ √(9 - x²) dx?',
-    question_type: 'mcq' as const,
-    max_marks: 5,
-    difficulty_level: 2,
-    bloom_taxonomy: 'understand',
-    options: [
-      { id: 'a', text: 'x = 3 tan(θ)', is_correct: false },
-      { id: 'b', text: 'x = 3 sin(θ)', is_correct: true },
-      { id: 'c', text: 'x = 3 sec(θ)', is_correct: false },
-      { id: 'd', text: 'u = 9 - x²', is_correct: false },
-    ],
-  },
-];
+interface ExamQuestion {
+  id: string;
+  question_text: string;
+  question_type: 'mcq' | 'short_answer' | 'essay';
+  max_marks: number;
+  difficulty_level: number;
+  bloom_taxonomy: string;
+  order_index: number;
+  options: { id: string; text: string; is_correct: boolean }[] | null;
+}
 
 function getDifficultyLabel(level: number) {
   const labels = ['', 'Easy', 'Moderate', 'Medium', 'Hard', 'Expert'];
@@ -92,31 +39,104 @@ function getDifficultyColor(level: number) {
 
 export default function LiveExamPage() {
   const router = useRouter();
+  const params = useParams();
+  const sessionId = params.sessionId as string;
+  const supabase = createClient();
+
+  const [questions, setQuestions] = useState<ExamQuestion[]>([]);
+  const [examTitle, setExamTitle] = useState('');
+  const [examId, setExamId] = useState('');
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [timeLeft, setTimeLeft] = useState(90 * 60); // 90 minutes
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showLockdownWarning, setShowLockdownWarning] = useState(true);
 
   // Enable exam lockdown
-  useExamLockdown('demo-session', !showLockdownWarning);
+  useExamLockdown(sessionId, !showLockdownWarning);
 
-  // Timer countdown and strict submission
+  // Load exam data from database
   useEffect(() => {
-    if (timeLeft <= 0) {
+    async function loadExam() {
+      try {
+        // 1. Get session info
+        const { data: session, error: sessionErr } = await supabase
+          .from('exam_sessions')
+          .select('exam_id, started_at, exams(title, duration_minutes)')
+          .eq('id', sessionId)
+          .single();
+
+        if (sessionErr || !session) {
+          console.error('Session not found:', sessionErr);
+          return;
+        }
+
+        // @ts-ignore
+        const title = session.exams?.title || 'Exam';
+        // @ts-ignore
+        const durationMins = session.exams?.duration_minutes || 60;
+        setExamTitle(title);
+        setExamId(session.exam_id);
+
+        // Calculate remaining time
+        const startedAt = session.started_at ? new Date(session.started_at) : new Date();
+        const endsAt = new Date(startedAt.getTime() + durationMins * 60 * 1000);
+        const remaining = Math.max(0, Math.floor((endsAt.getTime() - Date.now()) / 1000));
+        setTimeLeft(remaining);
+
+        // 2. Load questions for this exam
+        const { data: questionsData, error: questionsErr } = await supabase
+          .from('questions')
+          .select('id, question_text, question_type, max_marks, difficulty_level, bloom_taxonomy, order_index, options')
+          .eq('exam_id', session.exam_id)
+          .order('order_index', { ascending: true });
+
+        if (questionsErr) {
+          console.error('Failed to load questions:', questionsErr);
+          return;
+        }
+
+        setQuestions(questionsData || []);
+
+        // 3. Load any previously saved answers (for resume)
+        const { data: savedAnswers } = await supabase
+          .from('answers')
+          .select('question_id, student_answer')
+          .eq('session_id', sessionId);
+
+        if (savedAnswers && savedAnswers.length > 0) {
+          const answerMap: Record<string, string> = {};
+          savedAnswers.forEach((a: { question_id: string; student_answer: string }) => {
+            answerMap[a.question_id] = a.student_answer;
+          });
+          setAnswers(answerMap);
+        }
+      } catch (err) {
+        console.error('Error loading exam:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadExam();
+  }, [sessionId]);
+
+  // Timer countdown and auto-submit
+  useEffect(() => {
+    if (timeLeft <= 0 && !loading && questions.length > 0) {
       if (!submitting) {
         handleSubmit();
       }
       return;
     }
-    if (showLockdownWarning) return;
+    if (showLockdownWarning || loading) return;
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => prev - 1);
     }, 1000);
     return () => clearInterval(timer);
-  }, [timeLeft, showLockdownWarning, submitting]);
+  }, [timeLeft, showLockdownWarning, submitting, loading]);
 
   const formatTime = useCallback((seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -126,21 +146,163 @@ export default function LiveExamPage() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   }, []);
 
-  const question = DEMO_QUESTIONS[currentQ];
-  const progress = ((currentQ + 1) / DEMO_QUESTIONS.length) * 100;
+  const question = questions[currentQ];
+  const progress = questions.length > 0 ? ((currentQ + 1) / questions.length) * 100 : 0;
   const answeredCount = Object.keys(answers).length;
 
-  const handleAnswer = (answer: string) => {
+  const handleAnswer = async (answer: string) => {
+    if (!question) return;
     setAnswers((prev) => ({ ...prev, [question.id]: answer }));
+
+    // Auto-save answer to database (upsert)
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase
+        .from('answers')
+        .upsert({
+          session_id: sessionId,
+          question_id: question.id,
+          student_id: user.id,
+          student_answer: answer,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'session_id,question_id' });
+    } catch {
+      // Silent fail — don't disrupt exam
+    }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // 1. Save all remaining answers
+      const answersToUpsert = Object.entries(answers).map(([questionId, answer]) => ({
+        session_id: sessionId,
+        question_id: questionId,
+        student_id: user.id,
+        student_answer: answer,
+        updated_at: new Date().toISOString(),
+      }));
+
+      if (answersToUpsert.length > 0) {
+        await supabase
+          .from('answers')
+          .upsert(answersToUpsert, { onConflict: 'session_id,question_id' });
+      }
+
+      // 2. Auto-grade MCQ questions
+      let totalScore = 0;
+      let maxPossible = 0;
+
+      for (const q of questions) {
+        maxPossible += q.max_marks;
+        const studentAnswer = answers[q.id];
+        if (!studentAnswer) continue;
+
+        if (q.question_type === 'mcq' && q.options) {
+          const correctOption = q.options.find((o: { id: string; text: string; is_correct: boolean }) => o.is_correct);
+          if (correctOption && studentAnswer === correctOption.id) {
+            totalScore += q.max_marks;
+
+            // Update individual answer score
+            await supabase
+              .from('answers')
+              .update({ score: q.max_marks, ai_feedback: 'Correct answer.' })
+              .eq('session_id', sessionId)
+              .eq('question_id', q.id);
+          } else {
+            await supabase
+              .from('answers')
+              .update({ score: 0, ai_feedback: `Incorrect. The correct answer was: ${correctOption?.text || 'N/A'}` })
+              .eq('session_id', sessionId)
+              .eq('question_id', q.id);
+          }
+        }
+        // Short answer and essay will be graded by AI asynchronously later
+      }
+
+      // 3. Trigger AI grading for non-MCQ questions (fire and forget)
+      const nonMcqQuestions = questions.filter((q: ExamQuestion) => q.question_type !== 'mcq' && !!answers[q.id]);
+      for (const q of nonMcqQuestions) {
+        fetch('/api/ai/grade-answer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question_text: q.question_text,
+            model_solution: '',
+            student_answer: answers[q.id],
+            max_marks: q.max_marks,
+            rubric: { bloom_taxonomy: q.bloom_taxonomy },
+          }),
+        })
+          .then(res => res.json())
+          .then(result => {
+            if (result.score !== undefined) {
+              supabase
+                .from('answers')
+                .update({
+                  score: result.score,
+                  ai_feedback: result.feedback || result.explanation || '',
+                })
+                .eq('session_id', sessionId)
+                .eq('question_id', q.id)
+                .then(() => {});
+            }
+          })
+          .catch(() => {}); // Silent fail
+      }
+
+      // 4. Update session status to submitted
+      await supabase
+        .from('exam_sessions')
+        .update({
+          status: 'submitted',
+          submitted_at: new Date().toISOString(),
+          total_score: totalScore,
+        })
+        .eq('id', sessionId);
+
+      // 5. Navigate to results
       router.push('/dashboard/results');
-    }, 2000);
+    } catch (err) {
+      console.error('Submit error:', err);
+      setSubmitting(false);
+    }
   };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-10 h-10 border-2 border-zinc-600 border-t-indigo-500 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-zinc-400">Loading exam...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // No questions found
+  if (questions.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <div className="glass-card p-8 text-center max-w-md">
+          <HiExclamationTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
+          <h2 className="text-xl font-bold mb-2">No Questions Found</h2>
+          <p className="text-sm text-zinc-400 mb-6">
+            This exam has no questions yet. Please contact your instructor.
+          </p>
+          <button onClick={() => router.push('/dashboard')} className="btn-primary">
+            Return to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Lockdown warning screen
   if (showLockdownWarning) {
@@ -155,7 +317,8 @@ export default function LiveExamPage() {
           <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto mb-5">
             <HiShieldCheck className="w-8 h-8 text-amber-400" />
           </div>
-          <h1 className="text-2xl font-bold mb-3">Exam Lockdown Mode</h1>
+          <h1 className="text-2xl font-bold mb-1">{examTitle}</h1>
+          <p className="text-sm text-zinc-500 mb-4">{questions.length} questions · {formatTime(timeLeft)} remaining</p>
           <p className="text-sm text-zinc-400 mb-6 leading-relaxed">
             This exam will enter <strong className="text-white">lockdown mode</strong>.
             The following restrictions will be active:
@@ -203,11 +366,11 @@ export default function LiveExamPage() {
             <HiAcademicCap className="w-4 h-4 text-white" />
           </div>
           <span className="text-sm font-semibold hidden sm:block">
-            Advanced Mathematics — Calculus II
+            {examTitle}
           </span>
         </div>
 
-        {/* Progress Bar (no countdown anxiety — Finland style) */}
+        {/* Progress Bar */}
         <div className="flex-1 max-w-xs mx-6">
           <div className="w-full h-1.5 rounded-full bg-zinc-800">
             <motion.div
@@ -217,7 +380,7 @@ export default function LiveExamPage() {
             />
           </div>
           <div className="text-[10px] text-zinc-500 mt-1 text-center">
-            Question {currentQ + 1} of {DEMO_QUESTIONS.length}
+            Question {currentQ + 1} of {questions.length}
           </div>
         </div>
 
@@ -342,14 +505,14 @@ export default function LiveExamPage() {
             </button>
 
             <div className="hidden sm:flex gap-1.5">
-              {DEMO_QUESTIONS.map((_, idx) => (
+              {questions.map((_, idx) => (
                 <button
                   key={idx}
                   onClick={() => setCurrentQ(idx)}
                   className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
                     idx === currentQ
                       ? 'bg-indigo-500 text-white'
-                      : answers[DEMO_QUESTIONS[idx].id]
+                      : answers[questions[idx].id]
                       ? 'bg-green-500/20 text-green-400'
                       : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'
                   }`}
@@ -361,7 +524,7 @@ export default function LiveExamPage() {
 
             <button
               onClick={() => {
-                if (currentQ < DEMO_QUESTIONS.length - 1) {
+                if (currentQ < questions.length - 1) {
                   setCurrentQ(currentQ + 1);
                 } else {
                   setShowSubmitModal(true);
@@ -369,7 +532,7 @@ export default function LiveExamPage() {
               }}
               className="btn-primary flex items-center gap-2"
             >
-              {currentQ < DEMO_QUESTIONS.length - 1 ? 'Next' : 'Review & Submit'}
+              {currentQ < questions.length - 1 ? 'Next' : 'Review & Submit'}
               <HiChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -383,7 +546,7 @@ export default function LiveExamPage() {
             Question Navigator
           </h3>
           <div className="grid grid-cols-5 gap-2 mb-6">
-            {DEMO_QUESTIONS.map((q, idx) => (
+            {questions.map((q, idx) => (
               <button
                 key={q.id}
                 onClick={() => setCurrentQ(idx)}
@@ -411,7 +574,7 @@ export default function LiveExamPage() {
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded bg-zinc-800" />
-              Unanswered ({DEMO_QUESTIONS.length - answeredCount})
+              Unanswered ({questions.length - answeredCount})
             </div>
           </div>
         </aside>
@@ -444,12 +607,12 @@ export default function LiveExamPage() {
                   </span>{' '}
                   out of{' '}
                   <span className="text-white font-semibold">
-                    {DEMO_QUESTIONS.length}
+                    {questions.length}
                   </span>{' '}
                   questions.
                 </p>
 
-                {answeredCount < DEMO_QUESTIONS.length && (
+                {answeredCount < questions.length && (
                   <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm mb-6 flex items-center gap-2">
                     <HiExclamationTriangle className="w-4 h-4 shrink-0" />
                     You have unanswered questions!

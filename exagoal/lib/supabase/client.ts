@@ -1,6 +1,15 @@
 import { createBrowserClient } from '@supabase/ssr';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config';
 
+let browserClient: ReturnType<typeof createBrowserClient> | null = null;
+
 export function createClient() {
-  return createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  if (typeof window === 'undefined') {
+    return createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+
+  if (!browserClient) {
+    browserClient = createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+  return browserClient;
 }

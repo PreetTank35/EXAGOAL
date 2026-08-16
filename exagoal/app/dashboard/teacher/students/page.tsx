@@ -110,7 +110,7 @@ export default function StudentAnalyticsPage() {
       let completedCount = 0;
       const cData: ChartDataPoint[] = [];
 
-      sessions.forEach((s, idx) => {
+      sessions.forEach((s: any, idx: number) => {
         if (s.status === 'submitted' || s.status === 'graded') {
           completedCount++;
           const score = Number(s.total_score || 0);

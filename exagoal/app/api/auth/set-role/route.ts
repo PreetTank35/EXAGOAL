@@ -20,14 +20,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
     }
 
-    // Verify the requested role matches the database
-    const { data: profile, error: profileError } = await supabase
+    // Verify the requested role matches the database (unified profiles table)
+    const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single();
 
-    if (profileError || !profile || profile.role !== role) {
+    if (profile && profile.role === role) {
+      // Profile found and role matches — proceed
+    } else if (role === 'instructor') {
+      // Fallback: check teachers table for transition safety
+      const { data: teacher } = await supabase
+        .from('teachers')
+        .select('id')
+        .eq('id', user.id)
+        .single();
+      if (!teacher) {
+        return NextResponse.json({ error: 'Forbidden: You do not have this role' }, { status: 403 });
+      }
+    } else {
       return NextResponse.json({ error: 'Forbidden: You do not have this role' }, { status: 403 });
     }
 

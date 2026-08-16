@@ -19,7 +19,7 @@ export default function AIChatPage() {
     {
       id: 'welcome',
       role: 'assistant',
-      content: "Hello! I'm your ExaGoal AI Tutor, powered by Google Gemma. How can I help you learn today?",
+      content: "Hello! I'm your ExaGoal AI Tutor, powered by Google Gemini 2.5 Flash. How can I help you learn today?",
     },
   ]);
   const [input, setInput] = useState('');
@@ -122,7 +122,7 @@ export default function AIChatPage() {
             AI Tutor
           </h1>
           <p className="text-zinc-400 text-sm mt-1">
-            Powered by Google Gemma via OpenRouter (Streaming mode)
+            Powered by Google Gemini 2.5 Flash (Streaming mode)
           </p>
         </div>
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-800/50 border border-zinc-700/50 text-xs text-zinc-300">

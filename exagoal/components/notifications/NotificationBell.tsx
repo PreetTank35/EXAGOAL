@@ -37,11 +37,12 @@ export default function NotificationBell() {
   }, []);
 
   useEffect(() => {
-    let channel: RealtimeChannel;
+    let isMounted = true;
+    let channel: RealtimeChannel | null = null;
 
     const fetchNotifications = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user || !isMounted) return;
 
       const { data } = await supabase
         .from('student_notifications')
@@ -51,12 +52,18 @@ export default function NotificationBell() {
         .eq('notification_type', 'otp_delivery')
         .order('created_at', { ascending: false });
 
-      if (data) {
+      if (data && isMounted) {
         setNotifications(data as OtpNotification[]);
       }
 
-      // Setup Realtime
-      channel = supabase.channel('student-otp-alerts-bell')
+      if (!isMounted) return;
+
+      // Unique channel name with random id prevents StrictMode collisions
+      const channelName = `student-otp-bell-${user.id}-${Math.random().toString(36).substring(2, 9)}`;
+      const newChannel = supabase.channel(channelName);
+      channel = newChannel;
+
+      newChannel
         .on(
           'postgres_changes',
           {
@@ -65,8 +72,9 @@ export default function NotificationBell() {
             table: 'student_notifications',
             filter: `student_id=eq.${user.id}`,
           },
-          (payload) => {
-            const newNotif = payload.new as OtpNotification;
+          (payload: { new: Record<string, unknown> }) => {
+            if (!isMounted) return;
+            const newNotif = payload.new as unknown as OtpNotification;
             if (newNotif.status === 'active' && newNotif.notification_type === 'otp_delivery') {
               setNotifications((prev) => [newNotif, ...prev]);
             }
@@ -80,8 +88,9 @@ export default function NotificationBell() {
             table: 'student_notifications',
             filter: `student_id=eq.${user.id}`,
           },
-          (payload) => {
-            const updated = payload.new as OtpNotification;
+          (payload: { new: Record<string, unknown> }) => {
+            if (!isMounted) return;
+            const updated = payload.new as unknown as OtpNotification;
             setNotifications((prev) => {
               if (updated.status !== 'active') {
                 return prev.filter(n => n.id !== updated.id);
@@ -89,8 +98,13 @@ export default function NotificationBell() {
               return prev.map(n => n.id === updated.id ? updated : n);
             });
           }
-        )
-        .subscribe();
+        );
+
+      if (isMounted) {
+        newChannel.subscribe();
+      } else {
+        supabase.removeChannel(newChannel);
+      }
     };
 
     fetchNotifications();
@@ -104,10 +118,13 @@ export default function NotificationBell() {
     document.addEventListener('mousedown', handleClickOutside);
 
     return () => {
-      if (channel) supabase.removeChannel(channel);
+      isMounted = false;
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [supabase]);
+  }, []);
 
   const copyToClipboard = async (id: string, otpCode: string) => {
     try {

@@ -110,7 +110,9 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!process.env.OPENROUTER_API_KEY) {
+    const apiKey = process.env.OPENROUTER_API_KEY?.trim().replace(/['"\r\n]/g, '');
+
+    if (!apiKey) {
       return NextResponse.json(
         { error: 'OpenRouter API key is not configured.' },
         { status: 500 }
@@ -150,74 +152,117 @@ Rules:
 - bloom_taxonomy is one of: remember, understand, apply, analyze, evaluate, create.
 - Return ONLY the JSON object. No other text.`;
 
-    // Models to try in order — primary + reliable fallbacks
-    const MODELS = [
-      'google/gemma-4-31b-it:free',
-      'google/gemini-2.0-flash-lite-preview-02-05:free'
-    ];
-
+    // 1. Try Google Gemini 2.5 Flash first if GEMINI_API_KEY is available
+    const geminiKey = process.env.GEMINI_API_KEY?.trim().replace(/['"\r\n]/g, '');
     let rawContent = '';
-    let lastError = '';
     let usedModel = '';
+    let lastError = '';
 
-    for (const model of MODELS) {
-      const controller = new AbortController();
-      // Give Gemma more time (30s) since it's a larger model
-      const timeoutMs = model.includes('gemma') ? 30000 : 20000;
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-      
+    if (geminiKey) {
       try {
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
+        const geminiRes = await fetch(geminiUrl, {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-            'X-Title': 'ExaGoal AI Exam Generator',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model,
-            messages: [
-              { role: 'system', content: systemPrompt },
+            contents: [
               {
                 role: 'user',
-                content: `Generate ${question_count} questions based on this syllabus:\n\n${syllabus_text.substring(0, 5000)}`,
+                parts: [{ text: `Generate ${question_count} questions based on this syllabus:\n\n${syllabus_text.substring(0, 8000)}` }],
               },
             ],
-            temperature: 0.1,
-            max_tokens: 4096,
-            top_p: 0.9,
+            systemInstruction: {
+              parts: [{ text: systemPrompt }],
+            },
+            generationConfig: {
+              temperature: 0.1,
+              responseMimeType: 'application/json',
+            },
           }),
-          signal: controller.signal,
         });
-        
-        clearTimeout(timeoutId);
 
-        if (!response.ok) {
-          const err = await response.json().catch(() => ({}));
-          lastError = (err as Record<string, Record<string, string>>)?.error?.message || `Model ${model} returned ${response.status}`;
-          console.error(`[generate-exam] ${model} HTTP error:`, lastError);
-          continue;
-        }
-
-        const data = await response.json();
-        rawContent = data.choices?.[0]?.message?.content || '';
-
-        if (rawContent.trim()) {
-          usedModel = model;
-          break;
+        if (geminiRes.ok) {
+          const geminiData = await geminiRes.json();
+          rawContent = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          if (rawContent.trim()) {
+            usedModel = 'google/gemini-2.5-flash (Direct)';
+          }
         } else {
-          lastError = `Model ${model} returned an empty response`;
-          console.error(`[generate-exam] ${model}: empty response`);
+          const errData = await geminiRes.json().catch(() => ({}));
+          lastError = errData.error?.message || `Gemini returned HTTP ${geminiRes.status}`;
+          console.warn('[generate-exam] Gemini direct call failed, attempting fallback...', lastError);
         }
-      } catch (err: unknown) {
-        clearTimeout(timeoutId);
-        const error = err instanceof Error ? err : new Error(String(err));
-        lastError = error.name === 'AbortError' 
-          ? `Model ${model} timed out after ${timeoutMs / 1000}s` 
-          : error.message;
-        console.error(`[generate-exam] ${model} exception:`, lastError);
-        continue;
+      } catch (geminiErr: unknown) {
+        lastError = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+        console.warn('[generate-exam] Gemini direct call exception, attempting fallback...', lastError);
+      }
+    }
+
+    // 2. OpenRouter fallback if Gemini wasn't used or failed
+    if (!rawContent && apiKey) {
+      // Models to try in order — primary + reliable fallbacks
+      const MODELS = [
+        'nvidia/nemotron-3.5-lightning:free',
+        'google/gemma-4-26b-a4b-it:free',
+        'openai/gpt-oss-20b:free',
+        'liquid/lfm-2.5-2.6b:free',
+        'google/gemma-4-31b-it:free',
+      ];
+
+      for (const model of MODELS) {
+        const controller = new AbortController();
+        const timeoutMs = model.includes('gemma') ? 30000 : 20000;
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        
+        try {
+          const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+              'X-Title': 'ExaGoal AI Exam Generator',
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                { role: 'system', content: systemPrompt },
+                {
+                  role: 'user',
+                  content: `Generate ${question_count} questions based on this syllabus:\n\n${syllabus_text.substring(0, 5000)}`,
+                },
+              ],
+              temperature: 0.1,
+              max_tokens: 4096,
+              top_p: 0.9,
+            }),
+            signal: controller.signal,
+          });
+          
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            lastError = (err as Record<string, Record<string, string>>)?.error?.message || `Model ${model} returned ${response.status}`;
+            console.error(`[generate-exam] ${model} HTTP error:`, lastError);
+            continue;
+          }
+
+          const data = await response.json();
+          rawContent = data.choices?.[0]?.message?.content || '';
+
+          if (rawContent.trim()) {
+            usedModel = model;
+            break;
+          }
+        } catch (err: unknown) {
+          clearTimeout(timeoutId);
+          const error = err instanceof Error ? err : new Error(String(err));
+          lastError = error.name === 'AbortError' 
+            ? `Model ${model} timed out after ${timeoutMs / 1000}s` 
+            : error.message;
+          console.error(`[generate-exam] ${model} fetch exception:`, lastError);
+        }
       }
     }
 

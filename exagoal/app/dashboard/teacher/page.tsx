@@ -6,7 +6,7 @@ import { HiUsers, HiClipboardDocumentList, HiBookOpen, HiChartBar } from 'react-
 import { createClient } from '@/lib/supabase/client';
 
 export default function TeacherOverviewPage() {
-  const [stats, setStats] = useState({ syllabi: 0, exams: 0 });
+  const [stats, setStats] = useState({ syllabi: 0, exams: 0, students: 0, avgScore: '—' });
   const supabase = createClient();
 
   useEffect(() => {
@@ -24,9 +24,48 @@ export default function TeacherOverviewPage() {
         .select('*', { count: 'exact', head: true })
         .eq('created_by', user.id);
 
+      // Fetch teacher's exam IDs
+      const { data: teacherExams } = await supabase
+        .from('exams')
+        .select('id')
+        .eq('created_by', user.id);
+
+      let studentsCount = 0;
+      let avgScoreStr = '—';
+
+      if (teacherExams && teacherExams.length > 0) {
+        const examIds = teacherExams.map((e: { id: string }) => e.id);
+
+        // Count unique enrolled students
+        const { data: enrollments } = await supabase
+          .from('enrollments')
+          .select('student_id')
+          .in('exam_id', examIds);
+        
+        if (enrollments) {
+          const uniqueStudents = new Set(enrollments.map((e: { student_id: string }) => e.student_id));
+          studentsCount = uniqueStudents.size;
+        }
+
+        // Average score across graded sessions
+        const { data: scoredSessions } = await supabase
+          .from('exam_sessions')
+          .select('total_score')
+          .in('exam_id', examIds)
+          .in('status', ['submitted', 'graded'])
+          .not('total_score', 'is', null);
+
+        if (scoredSessions && scoredSessions.length > 0) {
+          const avg = scoredSessions.reduce((sum: number, s: { total_score: number | null }) => sum + (s.total_score || 0), 0) / scoredSessions.length;
+          avgScoreStr = `${avg.toFixed(1)}%`;
+        }
+      }
+
       setStats({
         syllabi: syllabiCount || 0,
         exams: examsCount || 0,
+        students: studentsCount,
+        avgScore: avgScoreStr,
       });
     }
     load();
@@ -46,10 +85,10 @@ export default function TeacherOverviewPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Total Students', value: '—', icon: HiUsers, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+          { label: 'Total Students', value: String(stats.students), icon: HiUsers, color: 'text-blue-400', bg: 'bg-blue-500/10' },
           { label: 'Active Syllabi', value: String(stats.syllabi), icon: HiBookOpen, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
           { label: 'AI Generated Exams', value: String(stats.exams), icon: HiClipboardDocumentList, color: 'text-rose-400', bg: 'bg-rose-500/10' },
-          { label: 'Average Score', value: '—', icon: HiChartBar, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+          { label: 'Average Score', value: stats.avgScore, icon: HiChartBar, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
         ].map((stat, i) => (
           <div key={i} className="glass-card p-6 flex flex-col gap-4">
             <div className="flex items-center justify-between">

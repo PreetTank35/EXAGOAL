@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { hashOTP } from '@/lib/otp';
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -45,17 +46,45 @@ export async function POST(
       return NextResponse.json({ error: 'Cannot launch a completed or archived exam.' }, { status: 400 });
     }
 
-    // 2. Fetch all students (in a real app, this would query an enrollments table)
-    const { data: students, error: studentsError } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('role', 'student');
+    // 2. Fetch enrolled students for this exam (not ALL students)
+    const { data: enrollments, error: enrollError } = await supabase
+      .from('enrollments')
+      .select('student_id')
+      .eq('exam_id', examId);
 
-    if (studentsError) {
-      return NextResponse.json({ error: 'Error fetching students.' }, { status: 500 });
+    if (enrollError) {
+      return NextResponse.json({ error: 'Error fetching enrolled students.' }, { status: 500 });
     }
-    
-    const studentsList = students || [];
+
+    // Fallback: if no enrollments exist yet, enroll all students (backwards compat for MVP)
+    let studentIds: string[];
+
+    if (!enrollments || enrollments.length === 0) {
+      const { data: allStudents, error: studentsError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'student');
+
+      if (studentsError) {
+        return NextResponse.json({ error: 'Error fetching students.' }, { status: 500 });
+      }
+
+      studentIds = (allStudents || []).map(s => s.id);
+
+      // Auto-enroll them for this exam so future launches use enrollments
+      if (studentIds.length > 0) {
+        const enrollmentsToInsert = studentIds.map(sid => ({
+          exam_id: examId,
+          student_id: sid,
+          enrolled_by: exam.created_by,
+        }));
+        await supabase
+          .from('enrollments')
+          .upsert(enrollmentsToInsert, { onConflict: 'exam_id,student_id', ignoreDuplicates: true });
+      }
+    } else {
+      studentIds = enrollments.map(e => e.student_id);
+    }
 
     // Set validity window (15 mins)
     const now = new Date();
@@ -65,31 +94,32 @@ export async function POST(
     const sessionsToInsert = [];
     const notificationsToInsert = [];
 
-    for (const student of studentsList) {
-      const otpCode = generateSecureOtp();
+    for (const studentId of studentIds) {
+      const otpPlain = generateSecureOtp();
+      const otpHash = hashOTP(otpPlain); // Store HMAC hash, not plaintext
       
-      // Upsert exam_session for this student
+      // Upsert exam_session for this student (store HASH)
       sessionsToInsert.push({
         exam_id: examId,
-        student_id: student.id,
-        otp_code: otpCode,
+        student_id: studentId,
+        otp_code: otpHash,
         otp_expires_at: expiresAt.toISOString(),
         status: 'otp_sent',
         otp_verified: false,
       });
 
-      // Insert real-time notification
+      // Insert real-time notification (contains PLAINTEXT for student display)
       notificationsToInsert.push({
-        student_id: student.id,
+        student_id: studentId,
         exam_id: examId,
         title: `Exam Access: ${exam.title}`,
-        message: `Your exam access code is ${otpCode}.`,
+        message: `Your exam access code is ${otpPlain}.`,
         notification_type: 'otp_delivery',
         is_read: false,
         status: 'active',
         expires_at: expiresAt.toISOString(),
         metadata: { 
-          otp_code: otpCode,
+          otp_code: otpPlain, // Plaintext for student delivery
           exam_scheduled_at: exam.scheduled_at
         }
       });
@@ -102,7 +132,7 @@ export async function POST(
       .eq('exam_id', examId)
       .eq('notification_type', 'otp_delivery');
 
-    if (studentsList.length > 0) {
+    if (studentIds.length > 0) {
       // 5. Insert new sessions (using upsert in case of re-launches)
       const { error: sessionInsertError } = await supabase
         .from('exam_sessions')
@@ -130,7 +160,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: `Exam launched. OTPs delivered to ${studentsList.length} students.`,
+      message: `Exam launched. OTPs delivered to ${studentIds.length} enrolled student(s).`,
     });
 
   } catch (error: any) {
