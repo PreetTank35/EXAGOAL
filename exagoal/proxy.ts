@@ -46,36 +46,65 @@ export async function proxy(request: NextRequest) {
   }
 
   // ── Protected routes: verify Supabase session ──────────────
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          // Set cookies on the request (for downstream server components)
-          cookiesToSet.forEach(({ name, value }) => {
-            request.cookies.set(name, value);
-          });
-          // Also set cookies on the response (for the browser)
-          response = NextResponse.next({
-            request: { headers: request.headers },
-          });
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
-        },
-      },
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    // Missing env configuration in deployment → redirect to login or 401
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: 'Server configuration error: Supabase environment variables are missing.' },
+        { status: 500 }
+      );
     }
-  );
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
+  }
 
-  // Refresh the session (this also refreshes expired tokens)
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  let user = null;
 
-  if (authError || !user) {
-    // No valid session → redirect to login (for page routes) or return 401 (for API)
+  try {
+    const supabase = createServerClient(
+      supabaseUrl,
+      supabaseKey,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) => {
+              request.cookies.set(name, value);
+            });
+            response = NextResponse.next({
+              request: { headers: request.headers },
+            });
+            cookiesToSet.forEach(({ name, value, options }) => {
+              response.cookies.set(name, value, options);
+            });
+          },
+        },
+      }
+    );
+
+    // Refresh the session with a 3-second timeout to prevent serverless function hangs
+    const timeoutPromise = new Promise<{ data: { user: null }; error: Error }>((resolve) =>
+      setTimeout(() => resolve({ data: { user: null }, error: new Error('Auth timeout') }), 3000)
+    );
+
+    const authResult = await Promise.race([
+      supabase.auth.getUser(),
+      timeoutPromise,
+    ]);
+
+    user = authResult.data?.user;
+  } catch (err) {
+    console.error('[Proxy] Auth verification error:', err);
+  }
+
+  if (!user) {
+    // No valid session or auth timed out → redirect to login or return 401
     if (pathname.startsWith('/api/')) {
       return NextResponse.json(
         { error: 'Unauthorized. Please sign in.' },
