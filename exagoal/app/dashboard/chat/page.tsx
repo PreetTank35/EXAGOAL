@@ -35,7 +35,7 @@ export default function AIChatPage() {
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!input.trim() || isLoading) return;
-    
+
     const userMessage: Message = { id: Date.now().toString(), role: 'user', content: input };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
@@ -55,10 +55,10 @@ export default function AIChatPage() {
       }
 
       if (!response.body) throw new Error('ReadableStream not supported');
-      
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
-      
+
       const aiMessageId = (Date.now() + 1).toString();
       setMessages(prev => [...prev, { id: aiMessageId, role: 'assistant', content: '' }]);
 
@@ -67,13 +67,13 @@ export default function AIChatPage() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        
+
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
-        
+
         // Keep the last incomplete line in the buffer
         buffer = lines.pop() || '';
-        
+
         for (const line of lines) {
           const trimmedLine = line.trim();
           if (trimmedLine.startsWith('data: ') && !trimmedLine.includes('[DONE]')) {
@@ -151,11 +151,10 @@ export default function AIChatPage() {
 
                 {/* Message Bubble */}
                 <div
-                  className={`max-w-[85%] sm:max-w-[85%] rounded-2xl px-5 py-4 ${
-                    msg.role === 'user'
+                  className={`max-w-[85%] sm:max-w-[85%] rounded-2xl px-5 py-4 ${msg.role === 'user'
                       ? 'bg-indigo-500 text-white rounded-tr-sm'
                       : 'bg-zinc-800/80 border border-zinc-700/50 text-zinc-200 rounded-tl-sm'
-                  }`}
+                    }`}
                 >
                   {msg.role === 'user' ? (
                     <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
@@ -228,9 +227,9 @@ export default function AIChatPage() {
               className="absolute right-2 bottom-2 p-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
-                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                 <HiPaperAirplane className="w-4 h-4" />
+                <HiPaperAirplane className="w-4 h-4" />
               )}
             </button>
           </form>

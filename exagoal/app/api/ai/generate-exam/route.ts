@@ -110,50 +110,49 @@ export async function POST(req: Request) {
       );
     }
 
+    const geminiKey = process.env.GEMINI_API_KEY?.trim().replace(/['"\r\n]/g, '');
     const apiKey = process.env.OPENROUTER_API_KEY?.trim().replace(/['"\r\n]/g, '');
 
-    if (!apiKey) {
+    if (!apiKey && !geminiKey) {
       return NextResponse.json(
-        { error: 'OpenRouter API key is not configured.' },
+        { error: 'Neither GEMINI_API_KEY nor OPENROUTER_API_KEY is configured.' },
         { status: 500 }
       );
     }
 
     const difficultyMap: Record<string, string> = {
-      easy: "Remember and Understand (simple recall)",
-      medium: "Apply and Analyze (apply concepts to scenarios)",
-      hard: "Evaluate and Create (complex critical thinking)",
-      adaptive: "mixed difficulty across all Bloom's levels",
+      easy: "Remember and Understand (foundational concepts, clear recall)",
+      medium: "Apply and Analyze (applying formulas, case scenarios, problem solving)",
+      hard: "Evaluate and Create (complex multi-step problems, critical thinking)",
+      adaptive: "Balanced mix spanning Bloom's Taxonomy from foundational to advanced",
     };
 
     const types = question_types || ['mcq'];
     const typesInstruction = types
       .map((t: string) => {
-        if (t === 'mcq') return 'MCQ with exactly 4 options (a, b, c, d) and one correct answer';
-        if (t === 'short_answer') return 'short_answer requiring 1-3 sentences';
-        if (t === 'essay') return 'essay requiring detailed paragraphs';
+        if (t === 'mcq') return 'Multiple Choice Questions (MCQ with 4 distinct options a, b, c, d)';
+        if (t === 'short_answer') return 'Short Answer questions (concise 1-3 sentence answers)';
+        if (t === 'essay') return 'Essay/Long Answer questions (in-depth conceptual explanations)';
         return t;
       })
       .join(', ');
 
-    const systemPrompt = `You are an expert exam question generator. You MUST respond with ONLY a valid JSON object — no markdown, no explanation, no code fences, no thinking, no preamble.
+    const countNum = parseInt(String(question_count), 10) || 10;
 
-Generate exactly ${question_count} questions of type: ${typesInstruction}.
-Difficulty: ${difficultyMap[difficulty] || difficultyMap.medium}
-Topic/Syllabus context is provided by the user.
+    const systemPrompt = `You are an expert university professor and examination board paper author.
+Your task is to generate an exam paper with EXACTLY ${countNum} distinct, high-quality, comprehensive questions based on the syllabus provided.
 
-Required JSON schema (respond with ONLY this structure):
-{"questions":[{"question_text":"string","question_type":"mcq","options":[{"id":"a","text":"string","is_correct":false},{"id":"b","text":"string","is_correct":true},{"id":"c","text":"string","is_correct":false},{"id":"d","text":"string","is_correct":false}],"correct_answer":"b","max_marks":1,"difficulty_level":3,"bloom_taxonomy":"understand"}]}
-
-Rules:
-- For MCQ: always include all 4 options with ids a/b/c/d; exactly one is_correct = true.
-- For short_answer or essay: omit the "options" field entirely. Set correct_answer to a model answer.
-- difficulty_level is 1-5 (1=easiest, 5=hardest).
-- bloom_taxonomy is one of: remember, understand, apply, analyze, evaluate, create.
-- Return ONLY the JSON object. No other text.`;
+CRITICAL RULES:
+1. You MUST generate an array of EXACTLY ${countNum} questions in the "questions" array.
+2. Every question and answer option must be fully formulated and specific to the syllabus. NEVER use placeholder text like "string" or "dummy".
+3. Question types allowed: ${typesInstruction}.
+4. Difficulty Level: ${difficultyMap[difficulty] || difficultyMap.medium}.
+5. For MCQ: always provide 4 distinct options with ids "a", "b", "c", "d". Exactly one option must have is_correct: true.
+6. For short_answer or essay: omit the "options" array. Set correct_answer to a complete model answer.
+7. Set difficulty_level (1-5) and bloom_taxonomy (remember, understand, apply, analyze, evaluate, create) accurately for each question.
+8. Output ONLY a valid JSON object with the "questions" key. No markdown fences, no explanatory text.`;
 
     // 1. Try Google Gemini 2.5 Flash first if GEMINI_API_KEY is available
-    const geminiKey = process.env.GEMINI_API_KEY?.trim().replace(/['"\r\n]/g, '');
     let rawContent = '';
     let usedModel = '';
     let lastError = '';
@@ -161,6 +160,8 @@ Rules:
     if (geminiKey) {
       try {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
+        const userPrompt = `Syllabus / Topics:\n${syllabus_text.substring(0, 8000)}\n\nGenerate EXACTLY ${countNum} comprehensive exam questions based on this syllabus.`;
+
         const geminiRes = await fetch(geminiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -168,14 +169,15 @@ Rules:
             contents: [
               {
                 role: 'user',
-                parts: [{ text: `Generate ${question_count} questions based on this syllabus:\n\n${syllabus_text.substring(0, 8000)}` }],
+                parts: [{ text: userPrompt }],
               },
             ],
             systemInstruction: {
               parts: [{ text: systemPrompt }],
             },
             generationConfig: {
-              temperature: 0.1,
+              temperature: 0.7,
+              maxOutputTokens: 8192,
               responseMimeType: 'application/json',
             },
           }),
@@ -229,11 +231,11 @@ Rules:
                 { role: 'system', content: systemPrompt },
                 {
                   role: 'user',
-                  content: `Generate ${question_count} questions based on this syllabus:\n\n${syllabus_text.substring(0, 5000)}`,
+                  content: `Syllabus / Topics:\n${syllabus_text.substring(0, 5000)}\n\nGenerate EXACTLY ${countNum} comprehensive exam questions based on this syllabus.`,
                 },
               ],
-              temperature: 0.1,
-              max_tokens: 4096,
+              temperature: 0.7,
+              max_tokens: 8192,
               top_p: 0.9,
             }),
             signal: controller.signal,
