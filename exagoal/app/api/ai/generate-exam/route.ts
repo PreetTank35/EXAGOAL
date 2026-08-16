@@ -73,9 +73,9 @@ function extractJSON(raw: string): string {
 
 /**
  * Attempt to repair common JSON issues from LLM output:
- * - Trailing commas
+ * - Unescaped backslashes in LaTeX math notation (\frac, \lim, \sin, \to, etc.)
+ * - Trailing commas before } or ]
  * - Single quotes instead of double quotes
- * - Unquoted keys
  */
 function repairJSON(raw: string): string {
   let fixed = raw;
@@ -83,13 +83,61 @@ function repairJSON(raw: string): string {
   // Remove trailing commas before } or ]
   fixed = fixed.replace(/,\s*([}\]])/g, '$1');
 
-  // Replace single-quoted strings with double-quoted (simple heuristic)
-  // Only do this if there are no double quotes at all
+  // Fix unescaped backslashes inside JSON strings (crucial for LaTeX math like \lim, \frac, \to, etc.)
+  fixed = fixed.replace(/"((?:[^"\\]|\\.)*)"/g, (_, str) => {
+    const sanitized = str.replace(/\\(?!["\\])/g, '\\\\');
+    return `"${sanitized}"`;
+  });
+
+  // Replace single-quoted strings if no double quotes exist
   if (!fixed.includes('"') && fixed.includes("'")) {
     fixed = fixed.replace(/'/g, '"');
   }
 
   return fixed;
+}
+
+/**
+ * Multi-stage robust JSON parser for LLM outputs
+ */
+function parseExamJSON(raw: string): Record<string, unknown> {
+  // Pass 1: Direct parse
+  try {
+    return JSON.parse(raw.trim());
+  } catch {}
+
+  // Pass 2: Extract JSON block
+  try {
+    const extracted = extractJSON(raw);
+    return JSON.parse(extracted);
+  } catch {}
+
+  // Pass 3: Extract + Repair (handles LaTeX backslashes and trailing commas)
+  try {
+    const extracted = extractJSON(raw);
+    const repaired = repairJSON(extracted);
+    return JSON.parse(repaired);
+  } catch {}
+
+  // Pass 4: Repair raw text directly
+  try {
+    const repaired = repairJSON(raw.trim());
+    return JSON.parse(repaired);
+  } catch {}
+
+  // Pass 5: Fallback regex to find question array if top-level object was malformed
+  try {
+    const arrayMatch = raw.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    if (arrayMatch) {
+      const repairedArray = repairJSON(arrayMatch[0]);
+      const questionsArray = JSON.parse(repairedArray);
+      if (Array.isArray(questionsArray)) {
+        return { questions: questionsArray };
+      }
+    }
+  } catch {}
+
+  throw new Error('Could not parse JSON from AI response');
 }
 
 export async function POST(req: Request) {
@@ -210,8 +258,8 @@ Rules:
 
           if (batch1Text && batch2Text) {
             try {
-              const p1 = JSON.parse(extractJSON(batch1Text));
-              const p2 = JSON.parse(extractJSON(batch2Text));
+              const p1 = parseExamJSON(batch1Text);
+              const p2 = parseExamJSON(batch2Text);
               const combined = [
                 ...(Array.isArray(p1.questions) ? p1.questions : []),
                 ...(Array.isArray(p2.questions) ? p2.questions : []),
@@ -240,7 +288,6 @@ Rules:
 
     // 2. OpenRouter fallback if Gemini wasn't used or failed
     if (!rawContent && apiKey) {
-      // Models to try in order — primary + reliable fallbacks
       const MODELS = [
         'nvidia/nemotron-3.5-lightning:free',
         'google/gemma-4-26b-a4b-it:free',
@@ -313,41 +360,20 @@ Rules:
       );
     }
 
-    // Parse with multi-stage JSON extraction
+    // Parse with multi-stage robust JSON parser
     let parsed: Record<string, unknown>;
-
-    // Stage 1: Try extractJSON (handles think blocks, fences, brace matching)
     try {
-      const jsonString = extractJSON(rawContent);
-      parsed = JSON.parse(jsonString);
-    } catch {
-      // Stage 2: Try with JSON repair (trailing commas, etc.)
-      try {
-        const jsonString = extractJSON(rawContent);
-        const repaired = repairJSON(jsonString);
-        parsed = JSON.parse(repaired);
-      } catch {
-        // Stage 3: Try parsing raw content directly
-        try {
-          parsed = JSON.parse(rawContent.trim());
-        } catch {
-          // Stage 4: Try repairing raw content
-          try {
-            const repaired = repairJSON(rawContent.trim());
-            parsed = JSON.parse(repaired);
-          } catch {
-            console.error(`[generate-exam] All JSON parsing failed. Model: ${usedModel}`);
-            console.error(`[generate-exam] Raw response (first 500 chars):`, rawContent.substring(0, 500));
-            return NextResponse.json(
-              {
-                error: 'AI returned malformed JSON. Please try again — the model may be overloaded.',
-                debug: rawContent.substring(0, 300),
-              },
-              { status: 422 }
-            );
-          }
-        }
-      }
+      parsed = parseExamJSON(rawContent);
+    } catch (parseError: unknown) {
+      console.error(`[generate-exam] All JSON parsing failed. Model: ${usedModel}`, parseError);
+      console.error(`[generate-exam] Raw response (first 500 chars):`, rawContent.substring(0, 500));
+      return NextResponse.json(
+        {
+          error: 'AI returned malformed JSON. Please try again — the model may be overloaded.',
+          debug: rawContent.substring(0, 300),
+        },
+        { status: 422 }
+      );
     }
 
     // Validate and normalise questions array
