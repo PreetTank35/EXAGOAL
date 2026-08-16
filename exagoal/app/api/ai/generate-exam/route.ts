@@ -160,43 +160,81 @@ CRITICAL RULES:
     if (geminiKey) {
       try {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
-        const userPrompt = `Syllabus / Topics:\n${syllabus_text.substring(0, 8000)}\n\nGenerate EXACTLY ${countNum} comprehensive exam questions based on this syllabus.`;
 
-        const geminiRes = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: userPrompt }],
+        // Helper to generate a batch of questions
+        const generateBatch = async (batchCount: number, batchIndex: number, totalBatches: number) => {
+          const batchInstruction = totalBatches > 1 
+            ? `(Batch ${batchIndex + 1} of ${totalBatches}: Focus on diverse syllabus topics)` 
+            : '';
+          const userPrompt = `Syllabus / Topics:\n${syllabus_text.substring(0, 6000)}\n\nGenerate EXACTLY ${batchCount} distinct, high-quality exam questions based on this syllabus. ${batchInstruction}`;
+
+          const batchSysPrompt = `You are an expert examination creator. Generate EXACTLY ${batchCount} questions in the "questions" array based on the syllabus.
+Rules:
+1. Return ONLY valid JSON: {"questions":[{"question_text":"...","question_type":"mcq","options":[{"id":"a","text":"...","is_correct":true},{"id":"b","text":"...","is_correct":false},{"id":"c","text":"...","is_correct":false},{"id":"d","text":"...","is_correct":false}],"correct_answer":"a","max_marks":1,"difficulty_level":3,"bloom_taxonomy":"apply"}]}
+2. Difficulty: ${difficultyMap[difficulty] || difficultyMap.medium}.
+3. Question types: ${typesInstruction}.
+4. Provide 4 distinct options for MCQs. No placeholders like "string" or "dummy".`;
+
+          const res = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+              systemInstruction: { parts: [{ text: batchSysPrompt }] },
+              generationConfig: {
+                temperature: 0.6,
+                maxOutputTokens: 4096,
+                responseMimeType: 'application/json',
               },
-            ],
-            systemInstruction: {
-              parts: [{ text: systemPrompt }],
-            },
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 8192,
-              responseMimeType: 'application/json',
-            },
-          }),
-        });
+            }),
+          });
 
-        if (geminiRes.ok) {
-          const geminiData = await geminiRes.json();
-          rawContent = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          if (rawContent.trim()) {
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error?.message || `Gemini HTTP ${res.status}`);
+          }
+
+          const data = await res.json();
+          return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        };
+
+        // If count > 8, split into 2 parallel batches for 2x faster execution
+        if (countNum > 8) {
+          const batch1Count = Math.ceil(countNum / 2);
+          const batch2Count = countNum - batch1Count;
+
+          const [batch1Text, batch2Text] = await Promise.all([
+            generateBatch(batch1Count, 0, 2),
+            generateBatch(batch2Count, 1, 2),
+          ]);
+
+          if (batch1Text && batch2Text) {
+            try {
+              const p1 = JSON.parse(extractJSON(batch1Text));
+              const p2 = JSON.parse(extractJSON(batch2Text));
+              const combined = [
+                ...(Array.isArray(p1.questions) ? p1.questions : []),
+                ...(Array.isArray(p2.questions) ? p2.questions : []),
+              ];
+              rawContent = JSON.stringify({ questions: combined });
+              usedModel = 'google/gemini-2.5-flash (Parallel Batches)';
+            } catch {
+              rawContent = batch1Text || batch2Text;
+              usedModel = 'google/gemini-2.5-flash (Direct)';
+            }
+          } else {
+            rawContent = batch1Text || batch2Text;
             usedModel = 'google/gemini-2.5-flash (Direct)';
           }
         } else {
-          const errData = await geminiRes.json().catch(() => ({}));
-          lastError = errData.error?.message || `Gemini returned HTTP ${geminiRes.status}`;
-          console.warn('[generate-exam] Gemini direct call failed, attempting fallback...', lastError);
+          rawContent = await generateBatch(countNum, 0, 1);
+          if (rawContent.trim()) {
+            usedModel = 'google/gemini-2.5-flash (Direct)';
+          }
         }
       } catch (geminiErr: unknown) {
         lastError = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
-        console.warn('[generate-exam] Gemini direct call exception, attempting fallback...', lastError);
+        console.warn('[generate-exam] Gemini call failed, attempting fallback...', lastError);
       }
     }
 
